@@ -26,7 +26,7 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { draftBrand, facetLinkage, isPlausibleCategory, type BrandProposal } from "./brand-draft";
-import { yamlQuote } from "./draft";
+import { renderCompetitors, yamlQuote } from "./draft";
 import { brandIdForDomain, brandHost, composeChildId } from "./brand-id";
 import { brandExists, createBrand } from "./brands";
 import { SURFACE_ID_RE } from "./surface";
@@ -69,6 +69,15 @@ function usableLocales(locales: string[]): string[] {
   return locales.filter((l) => LOCALE_RE.test(l));
 }
 
+// Competitors, rendered the same way in every proposed config. The probe reads them off
+// the brand's own comparison-page titles, so the list is observed rather than guessed —
+// and it is load-bearing: the comparison-page and outreach generators both key off
+// competitor claims, so a config that ships empty here quietly produces less. Empty stays
+// empty and says how to fill it, because inventing a rival is worse than an empty list.
+function competitorLines(competitors: { name: string; url: string }[], what: string): string[] {
+  return renderCompetitors(competitors, `fill in ${what} by hand`);
+}
+
 function header(domain: string, extra: string): string[] {
   return [
     `# proposed: drafted by \`answerable brand add ${domain}\`, ${new Date().toISOString().slice(0, 10)}.`,
@@ -109,7 +118,7 @@ function renderSiteYaml(
     `business_goal: >-  # proposed: placeholder; state the real goal`,
     `  Grow qualified search and AI-answer visibility for ${oneLine(p.brand.name)}.`,
     `desired_conversion: signup  # proposed: replace with the site's real conversion`,
-    `competitors: []  # proposed: the probe names none; fill by hand, or run \`draft ${site.host}\` which reads comparison-page titles`,
+    ...competitorLines(p.competitors, "the sites you are compared against"),
     `publishing:`,
     `  policy: review-required`,
     `  owner: operator  # proposed: confirm the owner`,
@@ -163,7 +172,7 @@ function renderAssistantYaml(
     `business_goal: >-  # proposed: placeholder; state the real goal`,
     `  Measure and grow ${oneLine(p.brand.name)}'s share of answer in ${lane.engine}.`,
     `desired_conversion: signup  # proposed: replace with the real conversion`,
-    `competitors: []  # proposed: name the competitors you expect to be recommended instead`,
+    ...competitorLines(p.competitors, "the names you expect to be recommended instead"),
     `publishing:`,
     `  policy: review-required`,
     `  owner: operator  # proposed: confirm the owner`,

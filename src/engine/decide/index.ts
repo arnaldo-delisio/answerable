@@ -15,7 +15,10 @@ import type { Prior } from "../learn/priors";
 
 type ClaimRow = typeof schema.claims.$inferSelect;
 
-// Default class weights (overridable per surface in config `policy`).
+// Default class weights (overridable per surface in config `policy`). `content-keyword`
+// and `authority` are reserved classes: no detector in src/engine/infer emits either, so
+// their rows here (and in DEFAULT_IMPACT and CLASS_OUTCOME_METRIC below) never score a
+// real claim. They are kept so the taxonomy stays whole when a detector lands.
 const DEFAULT_CLASS_WEIGHT: Record<string, number> = {
   "brand-defense": 1.5,
   "ai-visibility": 1.4,
@@ -36,7 +39,7 @@ const DEFAULT_CLASS_WEIGHT: Record<string, number> = {
 // they gate downstream discovery outright; tool-opportunity defaults medium for its
 // dual-lane payoff (search and AI answers both); content-keyword and competitor default
 // medium-low as contested, slower-compounding ground; authority defaults low pending
-// deeper measurement. A claim class missing here scores at the neutral 3.
+// deeper measurement (content-keyword and authority are reserved, per the note above). A claim class missing here scores at the neutral 3.
 const DEFAULT_IMPACT: Record<string, number> = {
   "brand-defense": 5,
   "ai-visibility": 4,

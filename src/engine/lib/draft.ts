@@ -153,26 +153,136 @@ export function claimedCategory(title: string | null, description: string | null
 }
 
 // Competitor names out of a comparison-page title: "X vs Y", "N best X alternatives".
-function competitorsFromTitle(title: string, brand: string): string[] {
+//
+// The "vs" branch requires the BRAND ITSELF to be one side of the comparison, and that
+// requirement is what makes the output a competitor list rather than a word list. Sites
+// use "vs" constantly for two of their own concepts ("anonymous vs identified events",
+// "churn rate vs retention rate"), and every such page was previously read as naming two
+// rivals — names that then travel into comparison pages and outreach drafts as observed
+// competitors. Requiring the brand to be a whole side (not merely present somewhere in
+// the title, since most titles end in " - Brand") keeps "PostHog vs Mixpanel" and drops
+// "Glue teams vs back-office teams - PostHog". Under-reading is the right error here:
+// an operator fills a short list in by hand, but cannot see that a long one is fiction.
+export function competitorsFromTitle(title: string, brand: string | string[]): string[] {
   const out: string[] = [];
-  const brandLower = brand.toLowerCase();
+  // The brand goes by several written forms on its own pages — the JSON-LD name
+  // ("Plausible Analytics"), the domain label ("plausible"), the title segment — and a
+  // page titled "Plausible vs Matomo" must be recognised whichever form the caller holds.
+  // So the caller passes every form it knows, and each contributes its first word too.
+  const forms = new Set<string>();
+  for (const name of Array.isArray(brand) ? brand : [brand]) {
+    const lower = name.trim().toLowerCase();
+    if (!lower) continue;
+    forms.add(lower);
+    forms.add(lower.split(/\s+/)[0]);
+  }
+  const isBrand = (name: string): boolean => forms.has(name.trim().toLowerCase());
+  const clean = (part: string): string =>
+    part
+      .replace(/^\s*\d+\s*/, "")
+      .replace(/[|:•·].*$/, "")
+      .replace(/\s+[-–—]\s+.*$/, "") // trailing " - Brand" / " — Docs - Brand" ornament
+      .replace(/\(\s*\d{4}\s*\)/g, "")
+      .replace(/\b(best|top|alternatives?|comparison|compare|review|in \d{4})\b/gi, "")
+      .trim()
+      .replace(/[,.]+$/, "");
   const vsParts = title.split(/\bvs\.?\b|\bversus\b/i);
   if (vsParts.length > 1) {
-    for (const part of vsParts) {
-      const name = part
-        .replace(/^\s*\d+\s*/, "")
-        .replace(/[|:•·].*$/, "")
-        .replace(/\(\s*\d{4}\s*\)/g, "")
-        .replace(/\b(best|top|alternatives?|comparison|compare|review|in \d{4})\b/gi, "")
-        .trim()
-        .replace(/[,.]+$/, "");
-      if (name && name.toLowerCase() !== brandLower && name.length < 40) out.push(name);
+    const cleaned = vsParts.map(clean);
+    if (cleaned.some(isBrand)) {
+      for (const name of cleaned) {
+        // "A vs B vs C" happens ("Cloudflare Web Analytics vs Plausible: a dedicated tool
+        // vs a side feature"), and the trailing sides are prose, not names. A product name
+        // does not open with an article, so those sides are dropped.
+        if (/^(a|an|the)\s/i.test(name)) continue;
+        if (name && !isBrand(name) && name.length < 40) out.push(name);
+      }
     }
   }
   const altMatch = /(?:to|for)\s+([A-Z][\w.-]+(?:\s+[A-Z][\w.-]+)?)\s*(?:alternatives?|$)/.exec(title) ??
     /^([\w.-]+)\s+alternatives?\b/i.exec(title.trim());
-  if (altMatch && altMatch[1].toLowerCase() !== brandLower) out.push(altMatch[1].trim());
+  if (altMatch && !isBrand(altMatch[1])) out.push(altMatch[1].trim());
   return out;
+}
+
+// Sitemap URLs for one origin, via robots.txt's own pointer when it has one. Shared with
+// the brand probe (brand-draft.ts), which needs the same page list to find comparison
+// pages: two entry points reading the same site must read it the same way.
+export async function fetchSitemapUrls(origin: string): Promise<{ urls: string[]; note: string | null }> {
+  const robots = await safeFetch(`${origin}/robots.txt`);
+  const sitemapPointer = robots.ok && robots.body ? /^sitemap:\s*(\S+)/im.exec(robots.body)?.[1] : undefined;
+  const sitemapRes = await safeFetch(sitemapPointer ?? `${origin}/sitemap.xml`);
+  if (!sitemapRes.ok || !sitemapRes.body) {
+    return { urls: [], note: `sitemap not readable (${sitemapRes.error ?? `http ${sitemapRes.status}`})` };
+  }
+  let urls = [...sitemapRes.body.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)].map((m) => m[1]);
+  // Sitemap index: follow the first child sitemap for real page URLs.
+  if (/<sitemapindex/i.test(sitemapRes.body) && urls.length > 0) {
+    const child = await safeFetch(urls[0]);
+    if (child.ok && child.body) {
+      urls = [...child.body.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)].map((m) => m[1]);
+    }
+  }
+  return { urls, note: null };
+}
+
+// Small crawl for competitor names: comparison-shaped URLs first, then a general sample.
+// A competitor list is not decoration — the comparison-page and outreach generators both
+// key off competitor claims, so a config that ships with `competitors: []` produces
+// strictly less than one that does not. Shared by `draft` and `brand add` for exactly
+// that reason.
+export async function discoverCompetitors(
+  sitemapUrls: string[],
+  brand: string | string[],
+): Promise<{ competitors: { name: string; url: string }[]; pagesCrawled: number; note: string | null }> {
+  const comparisonUrls = sitemapUrls.filter((u) => COMPARISON_RE.test(u));
+  const crawlSet = [...comparisonUrls, ...sitemapUrls.filter((u) => !comparisonUrls.includes(u))].slice(0, CRAWL_PAGE_LIMIT);
+  const competitorNames = new Map<string, string>(); // name -> first url seen on
+  let pagesCrawled = 0;
+  for (const url of crawlSet) {
+    const page = await safeFetch(url);
+    pagesCrawled += 1;
+    if (!page.ok || !page.body) continue;
+    const pageTitle = titleOf(page.body);
+    if (!pageTitle || !COMPARISON_RE.test(pageTitle)) continue;
+    for (const name of competitorsFromTitle(pageTitle, brand)) {
+      if (!competitorNames.has(name)) competitorNames.set(name, url);
+    }
+  }
+  return {
+    competitors: [...competitorNames.entries()].map(([name, url]) => ({ name, url })),
+    pagesCrawled,
+    note:
+      competitorNames.size === 0 && pagesCrawled > 0
+        ? `no competitor names found in comparison-page titles over ${pagesCrawled} crawled page(s)`
+        : null,
+  };
+}
+
+// Competitors, rendered identically by `draft` and `brand add`.
+//
+// The NAME is what the probe observed; the URL is not. The only URL the probe holds is the
+// brand's OWN comparison page, and `competitors[].url` is not provenance — the competitor
+// lane FETCHES it as that competitor's homepage (src/engine/sense/adapters/competitor.ts),
+// so writing the brand's page there would collect the brand's own content and file it as a
+// rival's evidence. Neither is there a defensible way to guess a company's homepage from
+// its name. So discovered competitors are emitted as commented-out entries citing the page
+// they were read from, with the list left empty and valid: the operator pastes the ones
+// that are real and supplies the URL only they can know.
+export function renderCompetitors(competitors: { name: string; url: string }[], emptyAdvice: string): string[] {
+  if (competitors.length === 0) {
+    return [`competitors: []  # proposed: no comparison-page titles on the site named any; ${emptyAdvice}`];
+  }
+  const lines = [
+    `competitors: []  # proposed: names below were read off comparison-page titles on the brand's own site.`,
+    `  # proposed: uncomment the ones that are really competitors and give each its own homepage URL`,
+    `  # proposed: (the competitor lane FETCHES that url, so it must be the competitor's site, not the page below).`,
+  ];
+  for (const c of competitors) {
+    lines.push(`  # - name: ${yamlQuote(c.name)}`);
+    lines.push(`  #   url: ""  # seen on ${c.url}`);
+  }
+  return lines;
 }
 
 export function yamlQuote(s: string): string {
@@ -203,15 +313,8 @@ function renderProposedYaml(p: Omit<DraftProbe, "yaml" | "yamlPath">): string {
     `business_goal: >-  # proposed: placeholder; state the real goal`,
     `  Grow qualified search and AI-answer visibility for ${p.brand}.`,
     `desired_conversion: signup  # proposed: replace with the site's real conversion`,
-    `competitors:${p.competitors.length === 0 ? " []  # proposed: none found in comparison-page titles; fill by hand" : ""}`,
+    ...renderCompetitors(p.competitors, "fill by hand"),
   );
-  if (p.competitors.length > 0) {
-    lines.push(`  # proposed: from comparison-page titles found on ${p.domain}; verify each`);
-    for (const c of p.competitors) {
-      lines.push(`  - name: ${yamlQuote(c.name)}`);
-      lines.push(`    url: ${yamlQuote(c.url)}`);
-    }
-  }
   lines.push(
     `publishing:`,
     `  policy: review-required`,
@@ -257,45 +360,17 @@ export async function draft(domain: string, projectRoot = process.cwd()): Promis
   let localeSource: DraftProbe["localeSource"] = locales.length > 0 ? "hreflang" : "none";
 
   // Sitemap for locale paths + the small comparison crawl.
-  let sitemapUrls: string[] = [];
-  const robots = await safeFetch(`${origin}/robots.txt`);
-  const sitemapPointer = robots.ok && robots.body ? /^sitemap:\s*(\S+)/im.exec(robots.body)?.[1] : undefined;
-  const sitemapRes = await safeFetch(sitemapPointer ?? `${origin}/sitemap.xml`);
-  if (sitemapRes.ok && sitemapRes.body) {
-    sitemapUrls = [...sitemapRes.body.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)].map((m) => m[1]);
-    // Sitemap index: follow the first child sitemap for real page URLs.
-    if (/<sitemapindex/i.test(sitemapRes.body) && sitemapUrls.length > 0) {
-      const child = await safeFetch(sitemapUrls[0]);
-      if (child.ok && child.body) {
-        sitemapUrls = [...child.body.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)].map((m) => m[1]);
-      }
-    }
-  } else {
-    notes.push(`sitemap not readable (${sitemapRes.error ?? `http ${sitemapRes.status}`}); locale paths and comparison crawl limited`);
-  }
+  const sitemap = await fetchSitemapUrls(origin);
+  const sitemapUrls = sitemap.urls;
+  if (sitemap.note) notes.push(`${sitemap.note}; locale paths and comparison crawl limited`);
   if (locales.length === 0 && sitemapUrls.length > 0) {
     locales = localesFromPaths(sitemapUrls);
     if (locales.length > 0) localeSource = "paths";
   }
 
-  // Small crawl: comparison-shaped URLs first, then a general sample, for competitor names.
-  const comparisonUrls = sitemapUrls.filter((u) => COMPARISON_RE.test(u));
-  const crawlSet = [...comparisonUrls, ...sitemapUrls.filter((u) => !comparisonUrls.includes(u))].slice(0, CRAWL_PAGE_LIMIT);
-  const competitorNames = new Map<string, string>(); // name -> first url seen on
-  let pagesCrawled = 0;
-  for (const url of crawlSet) {
-    const page = await safeFetch(url);
-    pagesCrawled += 1;
-    if (!page.ok || !page.body) continue;
-    const pageTitle = titleOf(page.body);
-    if (!pageTitle || !COMPARISON_RE.test(pageTitle)) continue;
-    for (const name of competitorsFromTitle(pageTitle, brand)) {
-      if (!competitorNames.has(name)) competitorNames.set(name, url);
-    }
-  }
-  if (competitorNames.size === 0 && pagesCrawled > 0) {
-    notes.push(`no competitor names found in comparison-page titles over ${pagesCrawled} crawled page(s)`);
-  }
+  const discovered = await discoverCompetitors(sitemapUrls, [brand, cleanDomain.replace(/^www\./, "").split(".")[0]]);
+  const pagesCrawled = discovered.pagesCrawled;
+  if (discovered.note) notes.push(discovered.note);
 
   const category = claimedCategory(title, description, brand);
   const categoryPhrase = category ?? `what ${cleanDomain.replace(/^www\./, "")} offers`;
@@ -314,7 +389,7 @@ export async function draft(domain: string, projectRoot = process.cwd()): Promis
     category,
     locales,
     localeSource,
-    competitors: [...competitorNames.entries()].map(([name, url]) => ({ name, url })),
+    competitors: discovered.competitors,
     prompts,
     pagesCrawled,
     notes,

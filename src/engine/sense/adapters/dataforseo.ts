@@ -107,10 +107,16 @@ function laneBudget(surface: Surface): number {
   return maxCostPerRun;
 }
 
-function brandTerm(surface: Surface): string {
+// Both calls this lane makes are keyed on a DOMAIN: backlinks summary takes one, and the
+// LLM-mentions search takes it as the keyword. A `site` target carries one; an
+// `assistant` target carries {engine, prompt_set} and a `community` target carries
+// {platform, query_set}, so neither has one to give. Returning the surface id there
+// would spend real money searching for a slug nobody writes — the lane reports gated
+// instead, per the rule that an unmeasurable thing is never reported as a number.
+function brandTerm(surface: Surface): string | null {
   const domain = (surface.target as Partial<WebLocaleTarget>).domain;
   if (typeof domain === "string" && domain.length > 0) return domain.replace(/^www\./, "");
-  return surface.id;
+  return null;
 }
 
 export async function collect(
@@ -140,6 +146,21 @@ export async function collect(
     });
   };
 
+  const domain = brandTerm(surface);
+  if (domain === null) {
+    row(
+      `dataforseo/lane-status@v1/no-domain`,
+      "gated",
+      {
+        surface_kind: surface.kind,
+        reason: `both DataForSEO calls are keyed on a domain, and a ${surface.kind} surface's target carries none`,
+        remedy: "enable the dataforseo lane on the site surface this one observes",
+      },
+      { url: null, fetched_at: Date.now(), method: "none" },
+    );
+    return { evidence: rows, panelObservations: [], cost: 0 };
+  }
+
   const login = process.env[ENV_LOGIN];
   const password = process.env[ENV_PASSWORD];
   if (!deps.port && (!login || !password)) {
@@ -161,7 +182,6 @@ export async function collect(
 
   const port = deps.port ?? new LiveDataForSeoClient(login as string, password as string, deps.fetch ?? fetch);
   const budget = laneBudget(surface);
-  const domain = brandTerm(surface);
 
   // Pre-call guardrail: refuse (honest "refused" row) instead of calling when the
   // estimate would push spend past the budget.

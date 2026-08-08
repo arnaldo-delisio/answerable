@@ -82,12 +82,13 @@ lanes:
   it.each([
     ["web-locale", "site"],
     ["ai-engine-lane", "assistant"],
+    ["community-platform", "community"],
   ])("tells a config still saying %s to write %s", (old, replacement) => {
     expect(() => parseSurface(config(old))).toThrow(SurfaceConfigError);
     expect(() => parseSurface(config(old))).toThrow(`kind: ${replacement}`);
   });
 
   it("still lists the valid set for a kind that was never a kind", () => {
-    expect(() => parseSurface(config("newsletter"))).toThrow("is not one of site | assistant | community-platform");
+    expect(() => parseSurface(config("newsletter"))).toThrow("is not one of site | assistant | community");
   });
 });

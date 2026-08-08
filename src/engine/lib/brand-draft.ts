@@ -20,6 +20,8 @@ import {
   localesFromPaths,
   claimedCategory,
   brandSegmentFromTitle,
+  fetchSitemapUrls,
+  discoverCompetitors,
 } from "./draft";
 import { extractAttr } from "../sense/adapters/crawl";
 
@@ -117,6 +119,10 @@ export interface BrandProposal {
     description: string | null;
     category: string | null;
   };
+  // Competitor names read off the primary property's own comparison-page titles
+  // ("X vs Y", "best X alternatives"). Observed, never guessed, and empty when the site
+  // publishes no comparison pages.
+  competitors: { name: string; url: string }[];
   facets: {
     websites: WebsiteFacet[];
     store_listings: StoreListingFacet[];
@@ -405,6 +411,9 @@ export async function draftBrand(domain: string): Promise<BrandProposal> {
       where: `${origin}/`,
     });
   }
+  // Sitemap URLs of the primary property, kept for the competitor crawl below whether or
+  // not the locale pass needed them.
+  let sitemapUrls: string[] = [];
   if (html && primaryLocales.length === 0) {
     const robots = await safeFetch(`${origin}/robots.txt`);
     if (!robots.ok || !robots.body) {
@@ -426,6 +435,7 @@ export async function draftBrand(domain: string): Promise<BrandProposal> {
           unreachable.push({ target: urls[0], error: child.error ?? `http ${child.status}` });
         }
       }
+      sitemapUrls = urls;
       primaryLocales = localesFromPaths(urls);
       if (primaryLocales.length > 0) {
         localeSource = "paths";
@@ -437,6 +447,25 @@ export async function draftBrand(domain: string): Promise<BrandProposal> {
     } else {
       unreachable.push({ target: sitemapUrl, error: sitemapRes.error ?? `http ${sitemapRes.status}` });
     }
+  }
+
+  // 2b. Competitors, from the primary property's own comparison-page titles. The same
+  // crawl `draft <domain>` runs, through the same shared helper: `brand add` is the
+  // recommended entry point, and it used to write `competitors: []` while the
+  // de-emphasised verb wrote a real list — so the headline path produced the weaker
+  // config. Competitor claims are what the comparison-page and outreach generators key
+  // off, so an empty list is a quieter product, not a neutral default. Primary property
+  // only: the sibling subdomains are docs and apps, not where comparison pages live.
+  let competitors: { name: string; url: string }[] = [];
+  if (html) {
+    if (sitemapUrls.length === 0) {
+      const sitemap = await fetchSitemapUrls(origin);
+      sitemapUrls = sitemap.urls;
+      if (sitemap.note) notes.push(`${sitemap.note}; the comparison crawl found no pages to read`);
+    }
+    const discovered = await discoverCompetitors(sitemapUrls, [name, apexLabel]);
+    competitors = discovered.competitors;
+    if (discovered.note) notes.push(discovered.note);
   }
 
   // 3. Link extraction: store listings, social profiles, and same-brand hosts.
@@ -530,6 +559,7 @@ export async function draftBrand(domain: string): Promise<BrandProposal> {
 
   return {
     brand: { name, primaryDomain: primaryHost, description, category },
+    competitors,
     facets: {
       websites,
       store_listings: [...storeByUrl.values()],

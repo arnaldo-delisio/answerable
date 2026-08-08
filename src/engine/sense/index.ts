@@ -98,12 +98,15 @@ export interface SenseResult {
   rowsWritten: number;
   laneCosts: Record<string, number>;
   cost: number;
+  // The lanes' own notes, in lane order: what the rows are true about but cannot explain.
+  notes: string[];
 }
 
 export async function sense(surface: Surface, runId: string): Promise<SenseResult> {
   const evidenceRows: EvidenceRow[] = [];
   const panelRows: PanelObservationRow[] = [];
   const laneCosts: Record<string, number> = {};
+  const notes: string[] = [];
   // null = neither the surfaces row nor the config names a brand, or that brand has
   // no identity profile yet. The brand matchers then match nothing rather than
   // guessing at names.
@@ -120,6 +123,7 @@ export async function sense(surface: Surface, runId: string): Promise<SenseResul
         : await adapter.collect(surface, runId);
       evidenceRows.push(...result.evidence);
       panelRows.push(...(result.panelObservations as PanelObservationRow[]));
+      notes.push(...(result.notes ?? []));
       laneCosts[lane] = result.cost;
     } else {
       evidenceRows.push({
@@ -140,7 +144,7 @@ export async function sense(surface: Surface, runId: string): Promise<SenseResul
   replaceRunEvidence(runId, evidenceRows, panelRows);
 
   const cost = Object.values(laneCosts).reduce((a, b) => a + b, 0);
-  return { rowsWritten: evidenceRows.length + panelRows.length, laneCosts, cost };
+  return { rowsWritten: evidenceRows.length + panelRows.length, laneCosts, cost, notes };
 }
 
 // Idempotent per station, lineage-safe: claim_evidence rows (written by infer) reference

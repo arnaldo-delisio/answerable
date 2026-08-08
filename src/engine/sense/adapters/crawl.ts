@@ -1,7 +1,7 @@
 // Crawl sense adapter: robots per-bot, sitemap, hreflang, canonicals, schema, SSR,
 // AI-bot access probes, Content-Signal + noai. This lane runs live for every
 // site surface; crawl-class checks do not apply to assistant or
-// community-platform surfaces.
+// community surfaces.
 // Polite: sequential fetches with 300ms gaps, 10s timeouts. Every fetch failure writes
 // an honest "fail" evidence row; collect never throws for a network-level problem.
 
@@ -25,6 +25,10 @@ export interface CollectResult {
   evidence: EvidenceRow[];
   panelObservations: unknown[];
   cost: number;
+  // Lane-level remarks for the operator: things the rows themselves are true about but
+  // cannot explain. The sense station collects them and `run` prints them (--json carries
+  // them), the same way the other stations surface their notes. Absent = nothing to say.
+  notes?: string[];
 }
 
 export const BOTS = ["GPTBot", "PerplexityBot", "ClaudeBot", "OAI-SearchBot", "Googlebot"] as const;

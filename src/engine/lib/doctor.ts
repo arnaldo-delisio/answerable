@@ -5,6 +5,7 @@
 
 import { execFileSync } from "node:child_process";
 import { db, schema } from "../../db";
+import { identityFromRow, missingBareLabel } from "./brand-identity";
 
 // Adapter -> env vars that unlock it (adapters' own ENV_VAR declarations; the google
 // service-account path OR the oauth triple satisfies gsc/analytics).
@@ -65,6 +66,9 @@ export interface DoctorReport {
   lastRunPerSurface: { surfaceId: string; runId: string; startedAt: number; stationsRun: string[] }[];
   // What each missing key unlocks, from the key-pending rows' own value text.
   keyPending: { checkKey: string; reason: string | null; unlock: string | null; price: string | null }[];
+  // Brands whose aliases do not carry the domain's bare label: they will match "acme.com"
+  // and "acme com" and miss every answer that says "Acme", which is how answers name brands.
+  brandsMissingBareLabel: { brandId: string; aliases: string[]; label: string }[];
 }
 
 function cliVersion(cli: string): { found: boolean; version: string | null } {
@@ -102,6 +106,7 @@ export function doctor(): DoctorReport {
     db: { reachable: false, error: null, rowCounts: {} },
     lastRunPerSurface: [],
     keyPending: [],
+    brandsMissingBareLabel: [],
   };
 
   try {
@@ -137,6 +142,12 @@ export function doctor(): DoctorReport {
       } else {
         report.lastRunPerSurface.push({ surfaceId: s.id, runId: "(none)", startedAt: 0, stationsRun: [] });
       }
+    }
+
+    for (const b of db.select().from(schema.brands).all()) {
+      const identity = identityFromRow(b);
+      const label = missingBareLabel(identity);
+      if (identity && label) report.brandsMissingBareLabel.push({ brandId: b.id, aliases: identity.aliases, label });
     }
 
     // Latest key-pending row per check_key: the lane's own words on what a key unlocks.
@@ -208,6 +219,12 @@ export function renderDoctor(r: DoctorReport): string {
         ? `    ${s.surfaceId}: no runs yet`
         : `    ${s.surfaceId}: ${new Date(s.startedAt).toISOString()} (${s.stationsRun.join("+") || "open"}) run ${s.runId}`,
     );
+  }
+  if (r.brandsMissingBareLabel.length > 0) {
+    lines.push("  brands whose aliases do not include their plain name:");
+    for (const b of r.brandsMissingBareLabel) {
+      lines.push(`    ${b.brandId}: aliases ${b.aliases.join(", ")}; if people say "${b.label}": answerable brand alias ${b.brandId} ${b.label}`);
+    }
   }
   if (r.keyPending.length > 0) {
     lines.push("  missing keys and what they unlock (the lanes' own words):");

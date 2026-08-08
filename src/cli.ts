@@ -211,7 +211,7 @@ async function onboard(file: string): Promise<void> {
 async function runSurface(surfaceId: string): Promise<{
   runId: string;
   surfaceId: string;
-  sense: { rowsWritten: number; laneCosts: Record<string, number> };
+  sense: { rowsWritten: number; laneCosts: Record<string, number>; notes: string[] };
   snapshots: Record<string, number>;
   costTotal: number;
 }> {
@@ -228,7 +228,7 @@ async function runSurface(surfaceId: string): Promise<{
   return {
     runId,
     surfaceId,
-    sense: { rowsWritten: senseResult.rowsWritten, laneCosts: senseResult.laneCosts },
+    sense: { rowsWritten: senseResult.rowsWritten, laneCosts: senseResult.laneCosts, notes: senseResult.notes },
     snapshots,
     costTotal,
   };
@@ -239,6 +239,7 @@ function printRunResult(r: Awaited<ReturnType<typeof runSurface>>): void {
   for (const [lane, cost] of Object.entries(r.sense.laneCosts)) {
     console.log(`    lane ${lane}: cost ${cost}`);
   }
+  for (const n of r.sense.notes) console.log(`  note: ${n}`);
   console.log("  snapshots:");
   for (const [metric, value] of Object.entries(r.snapshots)) {
     console.log(`    ${metric}: ${value}`);

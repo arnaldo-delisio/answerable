@@ -15,7 +15,7 @@ import {
 
 // ---- shared JSON shapes -------------------------------------------------
 
-export type SurfaceKind = "site" | "assistant" | "community-platform";
+export type SurfaceKind = "site" | "assistant" | "community";
 
 export type ConfidenceTag =
   | "observed"

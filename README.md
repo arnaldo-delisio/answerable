@@ -15,9 +15,16 @@ A brand has **surfaces**: the places it can show up.
 
 - a **site** — a website, or one locale of one
 - an **assistant** — an AI answer engine people ask, like ChatGPT or Claude
+- a **community** — a forum where the brand is discussed and owns none of the text, like
+  Reddit or Hacker News
+
+A brand has sites it owns, assistants people ask, and communities where it is discussed.
 
 You name the brand once. Answerable probes the domain, finds the surfaces, and proposes a
-config for each. Nothing is watched until you say so.
+config for each site and assistant it found. Communities are hand-written: `brand add`
+proposes one only where the probe has evidence of a specific community presence, and it
+has none today, so `config/surfaces/example-community-hn.yaml` is the shape to copy.
+Nothing is watched until you say so.
 
 Then, for each surface, it walks a loop: **sense** (collect real evidence) → **infer**
 (turn evidence into claims that could be wrong) → **decide** (rank them, with a score you
@@ -114,26 +121,59 @@ Run `npx tsx src/cli.ts` with no arguments for the current list. In short:
 Exit code 1 always means the verb refused, with the reason in `note`. Never a silent
 no-op.
 
+What `act` writes, by claim class: **fix specs** for technical and eligibility claims
+(hreflang, site basics, bot blocks, SSR), **comparison pages** for competitor claims,
+**owned answer pages** for brand-defense claims, **tool specs** for tool opportunities,
+**outreach drafts** for pages that cite your competitors and not you, and — for
+`ai-visibility` claims, the second-highest-weighted class in the product — **quick-answer
+(AEO) blocks**: a 40 to 60 word answer per discovery prompt from your assistant surface's
+prompt set, each citing the prompt it answers, for the homepage and any tool pages, plus a
+`FAQPage` JSON-LD block over the same set. It is what you paste into a page to be the
+thing an answer engine quotes. Without a local `claude` CLI the blocks are written as
+`draft-pending` rather than invented.
+
 Two things worth knowing before you are surprised by them. `publish` does not put a page
 on your site: it opens a PR on the repo your config names, or hands you a spec to deliver.
 And some drafts are deliberately unfinished — the comparison-page generator writes literal
 `[NEEDS SOURCE]` rather than inventing a competitor's pricing, and `approve` refuses any
 body still carrying one. Fill it in with `edit`, or ask for a revision with `regenerate`.
 
-## Connect your data
+## Your data
 
-Answerable runs keyless out of the box: site crawls, AI-answer panels, community scans,
-competitor pages. Every key below only deepens a lane that already runs. Start with
-`doctor` — it names exactly what each missing key would unlock and what it costs.
+### What runs with no credentials at all
+
+This is the part worth knowing first. On a fresh clone, with an empty `.env`, four lanes
+collect real evidence:
+
+| Lane | Surface kind | What it collects | How |
+|---|---|---|---|
+| `crawl` | site | robots and per-bot access (GPTBot, ClaudeBot, PerplexityBot…), sitemap, hreflang, canonicals, JSON-LD, SSR, Content-Signal | direct polite fetches of the site |
+| `geo-panel` | assistant | what ChatGPT and Claude actually answer to your prompt set, and who they cite | the `claude` and `codex` CLIs you are already signed into |
+| `community` | site, community | Reddit and Hacker News mentions of the brand, its competitors, and its demand queries (a `community` surface names one platform and gets only that one; a `site` surface sweeps both) | Reddit's public search JSON, HN via Algolia |
+| `competitor` | site | the comparison and "best X" pages that rank for your category, and whether they cite you | direct fetches |
+
+A fifth, `x`, joins them for free if the `xurl` CLI is already on your PATH: it collects X
+mentions of the brand on a `site` surface, or on a `community` surface whose platform is
+`x`, falling back to `X_BEARER_TOKEN` when the CLI is absent.
+
+So the whole loop — evidence, claims, ranking, drafted fixes, the review gate — runs
+before you connect anything. Start with `doctor`: it names what each lane can do right
+now, and what each missing key would add and cost.
+
+### The optional layer: keys that deepen a lane
+
+Every credential below extends a lane that already runs, or adds a keyed one. None of them
+is required, and a lane without its key shows as an honest gated state in `doctor`, never
+a zeroed metric.
 
 | Priority | Credential (`.env.example`) | Unlocks | Cost |
 |---|---|---|---|
 | 1 | `GSC_OAUTH_CLIENT_ID` / `GSC_OAUTH_CLIENT_SECRET` / `GSC_OAUTH_REFRESH_TOKEN` / `GSC_SITE_URL` | Google Search Console: real indexation coverage, queries, impressions and clicks per path. The single highest-value connection. Shortcut: instead of an OAuth dance, have the Google account owner add a service account as a restricted user on the property, then point `GOOGLE_APPLICATION_CREDENTIALS` at its key file. | Free |
-| 2 | `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` | Rank tracking, keyword volumes, backlinks, LLM mentions | Cents per query, budget-guarded |
+| 2 | `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` | Two calls: a backlinks summary (domain rank + referring domains) and an LLM-mentions search for the brand. Every call is refused before it is made when the estimate would pass the surface's `max_cost_per_run`. Keyed on a domain, so it belongs on a `site` surface; the lane matrix also allows it on an `assistant` surface, where the target carries no domain and it reports gated instead of spending | Cents per call, budget-guarded |
 | 3 | `PAGESPEED_API_KEY` | Real Core Web Vitals via PageSpeed Insights | Free |
 | 4 | `GOOGLE_APPLICATION_CREDENTIALS` + `GA4_PROPERTY_ID` | GA4: conversions on the pages the fixes touch | Free |
-| 5 | `BING_WEBMASTER_KEY` | Bing Webmaster coverage + submission | Free |
-| 6 | `X_BEARER_TOKEN` | X mentions lane | Free tier |
+| 5 | `BING_WEBMASTER_KEY` | Bing Webmaster, read-only: rank and traffic stats, plus your remaining URL-submission quota. The engine reads the quota and never submits a URL | Free |
+| 6 | `X_BEARER_TOKEN` | X mentions lane (skip it if the `xurl` CLI is on your PATH — the lane tries that first) | Free tier |
 | 7 | `ANTHROPIC_API_KEY` | API-billed interpretation for `infer` (falls back to the local `claude` CLI when unset) | Metered |
 | 8 | `ANSWERABLE_NOTIFY_WEBHOOK` | Run and review summaries posted to your webhook | Free |
 

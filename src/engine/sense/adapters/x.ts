@@ -4,7 +4,7 @@
 
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import type { Surface } from "../../lib/surface";
+import type { CommunityPlatformTarget, Surface } from "../../lib/surface";
 import type { CollectResult, EvidenceRow } from "./crawl";
 import { deriveQueries, dropNegativeHits, slugify, type TopHit } from "./community";
 import type { BrandIdentity } from "../../lib/brand-identity";
@@ -105,6 +105,21 @@ export async function collect(
       cost: 0,
     });
   };
+
+  // Same one-surface/one-place contract the community lane honours: a `community` surface
+  // names ONE platform in its target, so the X lane collects only where that platform is
+  // `x`. A `site` surface has no platform field at all (the loader refuses fields outside
+  // the kind's target shape), so its X lane is untouched.
+  const platform = (surface.target as Partial<CommunityPlatformTarget>).platform;
+  if (platform !== undefined && platform !== "x") {
+    row(
+      `x/lane-status@v1/platform`,
+      "skip",
+      { platform, reason: `this surface tracks "${platform}"; the x lane collects only a surface whose platform is x` },
+      { url: null, fetched_at: Date.now(), method: "none" },
+    );
+    return { evidence: rows, panelObservations: [], cost: 0 };
+  }
 
   const token = process.env[ENV_VAR];
   const haveXurl = !token && xurlOnPath();

@@ -1,7 +1,10 @@
 // Infer station: evidence -> claims for the latest run of a surface. Rule-based
-// detectors are deterministic; each claim carries a class from the fixed taxonomy
-// (technical, eligibility, content-keyword, competitor, ai-visibility, brand-defense,
-// authority, tool-opportunity), confidence (strongest supporting confidence_tag mapped
+// detectors are deterministic; each claim carries a class. Six classes have a detector
+// and are the only classes anything here can emit: technical, eligibility, competitor,
+// ai-visibility, brand-defense, tool-opportunity. `content-keyword` and `authority` are
+// RESERVED — they carry weights below and downstream consumers are ready for them, but no
+// detector produces one, so no claim of either class exists today. Also on each claim:
+// confidence (strongest supporting confidence_tag mapped
 // per the prioritization-score class weights), falsifiability text, claim_evidence
 // links, and its brief-schema row.
 // Dedup: same class+subject re-observed updates the existing claim (stable id slug),
@@ -34,6 +37,8 @@ const TAG_CONFIDENCE: Record<string, number> = {
 
 // Default class weights: initial priority by class weight (impact x confidence x class
 // weight x prior / effort; every factor is stored decomposed, never a black-box score).
+// `content-keyword` and `authority` are the reserved classes above: weights waiting for a
+// detector, not live scoring rows.
 const CLASS_WEIGHT: Record<string, number> = {
   "brand-defense": 1.5,
   "ai-visibility": 1.4,

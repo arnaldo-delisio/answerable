@@ -154,6 +154,32 @@ export function hasNegativeContext(text: string, identity: BrandIdentity | null)
   return identity.negativeTerms.some((t) => wordIndex(text, t) >= 0);
 }
 
+// The brand's bare label ("htmx" from htmx.org) when NO alias already carries it, or ""
+// when one does (or there is no label to derive). A brand seeded from its domain matches
+// "htmx.org" and "htmx org" and nothing else, while answers name brands plainly — so the
+// identity is real, the engine really looked, and it will still miss nearly everything.
+//
+// This asks the one question the warning exists to raise: is the bare label missing? It
+// deliberately does NOT try to classify each alias as domain-shaped or name-shaped. Text
+// alone cannot separate a display name that happens to spell the domain ("Acme Corp" on
+// acme.corp) from a spoken domain, and every attempt to draw that line moved the false
+// positive rather than removing it. Absence of the label is decidable, so absence is what
+// is reported.
+//
+// Reporting only, in both directions: nothing here adds the label. That stays the
+// operator's call (see the matching rule at the top of this file); the callers use this
+// only to SAY it is missing, pointing at `brand alias`.
+export function missingBareLabel(identity: BrandIdentity | null): string {
+  if (!identity) return "";
+  const host = brandHost(identity.url);
+  const label = host ? (host.split(".")[0] ?? "") : "";
+  if (!label) return "";
+  // Aliases are already normalized on the way in (normalizeTerms), and matching is
+  // case-insensitive, so the comparison is too.
+  const key = label.toLowerCase();
+  return identity.aliases.some((a) => a.trim().toLowerCase() === key) ? "" : label;
+}
+
 // ---- seeding from the probe -------------------------------------------------
 
 // The aliases a newly probed brand starts with: the primary domain as written,

@@ -4,7 +4,7 @@
 // (429 included); collect never throws for a network-level problem.
 
 import { randomUUID } from "node:crypto";
-import type { Surface, WebLocaleTarget } from "../../lib/surface";
+import type { CommunityPlatformTarget, Surface, WebLocaleTarget } from "../../lib/surface";
 import type { CollectResult, EvidenceRow } from "./crawl";
 import { wordIndex, type BrandIdentity } from "../../lib/brand-identity";
 
@@ -226,13 +226,35 @@ export async function collect(
     };
   };
 
+  // A `community` surface names ONE platform in its target, and this lane honours it:
+  // a surface that says reddit collects reddit, and nothing else. A `site` surface has no
+  // platform field at all (the loader refuses fields outside the kind's target shape), so
+  // its community lane keeps sweeping both platforms, which is what it has always done.
+  // Platform `x` is served by the X adapter, not this one; saying so on a row is better
+  // than a lane that ran and quietly wrote nothing.
+  const platform = (surface.target as Partial<CommunityPlatformTarget>).platform;
+  const wantReddit = platform === undefined || platform === "reddit";
+  const wantHn = platform === undefined || platform === "hacker-news";
+  if (!wantReddit && !wantHn) {
+    row(
+      "community/lane-status@v1",
+      "skip",
+      { platform, reason: `platform "${platform}" is collected by the x lane, not the community lane` },
+      "",
+      Date.now(),
+    );
+    return { evidence: rows, panelObservations: [], cost: 0 };
+  }
+
   for (const { query, kind } of queries) {
     const slug = slugify(query);
 
     // Reddit public search JSON
     const redditUrl = `https://www.reddit.com/search.json?q=${encodeURIComponent(query)}&sort=new&t=month`;
-    const reddit = await politeJsonFetch(redditUrl);
-    if (!reddit.ok) {
+    const reddit = wantReddit ? await politeJsonFetch(redditUrl) : null;
+    if (reddit === null) {
+      // platform-scoped surface: not this platform, no row
+    } else if (!reddit.ok) {
       row(`community/reddit-mentions@v1/${slug}`, "fail", { query, query_kind: kind, ...failValue(reddit) }, redditUrl, reddit.fetchedAt);
     } else {
       const { hit_count, top_hits } = extractReddit(reddit.json);
@@ -245,8 +267,10 @@ export async function collect(
     // are topical, not entities.
     const hnQuery = kind === "demand" || query.startsWith('"') ? query : `"${query}"`;
     const hnUrl = `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(hnQuery)}`;
-    const hn = await politeJsonFetch(hnUrl);
-    if (!hn.ok) {
+    const hn = wantHn ? await politeJsonFetch(hnUrl) : null;
+    if (hn === null) {
+      // platform-scoped surface: not this platform, no row
+    } else if (!hn.ok) {
       row(`community/hn-mentions@v1/${slug}`, "fail", { query, query_kind: kind, ...failValue(hn) }, hnUrl, hn.fetchedAt);
     } else {
       const { hit_count, top_hits } = extractHn(hn.json);

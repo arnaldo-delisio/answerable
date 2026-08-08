@@ -18,15 +18,21 @@ afterwards checks whether the change actually went live.
 
 **The model.** A **brand** is the top-level object: the thing being made visible. A brand
 has **surfaces**, the places it can show up, and the surface is the engine's unit — every
-station runs per surface. Two kinds:
+station runs per surface. A brand has sites it owns, assistants people ask, and communities
+where it is discussed. Three kinds:
 
 - `kind: site` — a website, or one locale of one
 - `kind: assistant` — an AI answer engine people ask (ChatGPT, Claude); it declares the
   site surface it `observes`
+- `kind: community` — a forum where the brand is discussed and owns none of the text
+  (`target: {platform, query_set}`, platform being `reddit` | `hacker-news` | `x`; it
+  declares what it `observes` too). Keyless on Reddit and HN. `brand add` never proposes
+  one — copy `config/surfaces/example-community-hn.yaml` and write it by hand, and
+  only when the brand actually has a presence on that platform.
 
-(`kind: community-platform` exists too.) The old names `web-locale` and `ai-engine-lane`
-were renamed with no compatibility shim — a config using one is refused with a message
-naming its replacement. If you have an example memorised, it is out of date.
+The old names `web-locale`, `ai-engine-lane` and `community-platform` were renamed with no
+compatibility shim — a config using one is refused with a message naming its replacement.
+If you have an example memorised, it is out of date.
 
 **`brand add <domain>` is the entry point.** It probes the domain, creates ONE row (the
 brand), and writes a `config/surfaces/<id>.proposed.yaml` per surface it found. It
@@ -55,7 +61,7 @@ error, it just finds nothing to work on.
 | sense | `run <surface-id>` | the surface config | evidence rows + metric snapshots for this run |
 | infer | `infer <surface-id>` | the latest run's evidence | claims (each with confidence + a falsifiability condition) |
 | decide | `decide <surface-id>` | **open claims** | ranked scores, and a placed bet per claim worth acting on |
-| act | `act <surface-id>` | **placed bets** | generated assets (fix specs, answer pages, comparison pages, outreach drafts, tool specs) + narration |
+| act | `act <surface-id>` | **placed bets** | generated assets (fix specs, answer pages, comparison pages, quick-answer AEO blocks, outreach drafts, tool specs) + narration |
 | gate | `approve` / `reject` | a generated asset | approved or rejected state — **human decision, see below** |
 | publish | `publish <asset-id>` | an approved asset | a PR or a spec handoff; the bet moves to `shipped` |
 | verify | `verify <surface-id>` | two runs + shipped bets | run-over-run diff and the did-it-ship check (plus an experimental outcome assessment) |
@@ -92,7 +98,7 @@ npx tsx src/cli.ts preview <asset-id>                   # read what it wrote, be
 Grouped by what they are for. All of them take `--json`.
 
 **Setup**
-- `brand add <domain>` — the entry point: probe a domain, create the brand, write a proposed config per surface. Refuses (writing nothing) if the brand already exists.
+- `brand add <domain>` — the entry point: probe a domain, create the brand, write a proposed config per site and assistant surface it found (never a community surface — that one is hand-written). Each site proposal lists, commented out, the competitor names read off the brand's own comparison-page titles; `competitors:` ships empty and valid because the probe cannot know a competitor's own URL and the competitor lane fetches that URL. Uncomment the real ones and supply their URLs — the comparison-page and outreach generators key off competitor claims. Refuses (writing nothing) if the brand already exists.
 - `doctor` — credentials, CLIs, db, last run per surface.
 - `draft <domain>` — probe one site and write one proposed site config; creates no brand. Use it to add a site to a brand that already exists.
 - `onboard <file>` — validate and register a surface config (re-onboarding updates it).
@@ -153,7 +159,7 @@ not scrape the human text. Exit code 1 means the verb refused — never a silent
 | `act` (5 bets: 4 fix specs, 1 answer page, 11 narrations) | ~1.8 min |
 | `verify` (includes collecting a run) | ~1 min |
 | `draft <domain>` (12 pages crawled) | ~9 s |
-| `brand add <domain>` (probes the site, its subdomains, robots + sitemap) | ~10-30 s |
+| `brand add <domain>` (probes the site, its subdomains, robots + sitemap, and crawls up to 12 pages for comparison-page titles) | ~10-30 s |
 | `tick` with nothing due | ~1.5 s |
 
 Bigger prompt sets and more bets scale these up. Several minutes with stderr progress is
@@ -197,7 +203,9 @@ These are what the product is. Breaking one is worse than not finishing the task
    `edit` reports the same fact as `"draftIncomplete": true`. Do not route around it.
 
 2. **A gated or unmeasured metric is never zero.** A lane without its key shows as gated in
-   `doctor`. When a brand's negative terms filter every query, the headline
+   `doctor`, and so does a lane that cannot key on anything: DataForSEO needs a domain, so
+   on an assistant surface (the only non-site kind its lane matrix allows) it writes a gated
+   row and spends nothing — enable it on the site surface being observed. When a brand's negative terms filter every query, the headline
    `community_mention_count` / `x_mention_count` is *not written at all* and the
    provider-wide total appears as `community_mention_candidate_count` /
    `x_mention_candidate_count` — an upper bound containing look-alikes. Missing means "not
@@ -253,10 +261,10 @@ can ship to: a repo `publish` can PR against, or a spec they can hand-deliver.
   `brand create` against an existing id is refused, never merged.
 - **Surface config schema:** `onboard` validates against `src/engine/lib/surface.ts` and
   refuses with `config error: ...`. The shipped `config/surfaces/*.yaml` files are the
-  working examples — a `site`, and an `assistant` with `observes:` pointing at the site it
-  is measured against. Start from `brand add`'s proposals and one of those, never from
-  memory: a config saying `kind: web-locale` or `kind: ai-engine-lane` is refused, with the
-  new name in the message.
+  working examples — a `site`, an `assistant` with `observes:` pointing at the site it
+  is measured against, and a `community` naming one platform. Start from `brand add`'s proposals and one of those, never from
+  memory: a config saying `kind: web-locale`, `kind: ai-engine-lane` or
+  `kind: community-platform` is refused, with the new name in the message.
 - **Assets past the gate are never rewritten.** `edit` and `regenerate` work only on assets
   still in `generated`; on `approved`, `published`, `skipped` or `rejected` they refuse and
   leave the stored row byte-identical.

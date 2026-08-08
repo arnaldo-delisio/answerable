@@ -15,7 +15,7 @@ import { join } from "node:path";
 import type { Surface, AiEngineLaneTarget } from "../../lib/surface";
 import type { EvidenceRow, CollectResult } from "./crawl";
 import type { EntityCited } from "../../../db/schema";
-import { wordIndex, hasNegativeContext, type BrandIdentity } from "../../lib/brand-identity";
+import { wordIndex, hasNegativeContext, missingBareLabel, type BrandIdentity } from "../../lib/brand-identity";
 
 export interface PanelObservationRow {
   id: string;
@@ -154,6 +154,30 @@ export function extractEntities(
   };
 }
 
+// A whole run of zero owned hits is an ordinary result — a brand can genuinely be absent
+// from every answer. It is a different fact when the brand's bare label is missing from its
+// aliases: answers say "htmx", not "htmx.org", so that run measured a name nobody speaks.
+// The metric stands (it is what the aliases matched); this note states the count, lists the
+// aliases verbatim, and names the label to add. It never characterizes what the aliases
+// ARE — every alias is shown, so the operator reads the shape rather than being told it.
+// Null when there is nothing to warn about.
+//
+// EVERY observation must be a measured miss (`false`), not merely "not a hit": a `null`
+// observation is ungrounded, never searched, and counting it would make "0 of N answers
+// matched" claim more than the run measured. With an identity present, extractEntities
+// always returns a boolean, so this is stating the invariant rather than patching a live
+// case — the note asserts exactly what was looked at and nothing more.
+export function coverageNote(identity: BrandIdentity | null, observations: PanelObservationRow[]): string | null {
+  if (!identity || observations.length === 0) return null;
+  if (!observations.every((o) => o.ownedHit === false)) return null;
+  const label = missingBareLabel(identity);
+  if (!label) return null;
+  return (
+    `0 of ${observations.length} answers matched this brand. Its aliases are: ${identity.aliases.join(", ")}. ` +
+    `If people say "${label}", add it: answerable brand alias ${identity.id} ${label}`
+  );
+}
+
 export async function collect(
   surface: Surface,
   runId: string,
@@ -261,5 +285,6 @@ export async function collect(
     });
   }
 
-  return { evidence, panelObservations, cost: 0 };
+  const note = coverageNote(identity, panelObservations);
+  return { evidence, panelObservations, cost: 0, notes: note ? [note] : [] };
 }

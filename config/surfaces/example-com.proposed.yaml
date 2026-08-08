@@ -1,7 +1,7 @@
 # proposed: drafted by `answerable draft example.com`, 2026-08-08. Review every
 # proposed: field, then rename to example-com.yaml and `answerable onboard` it.
 id: example-com
-kind: web-locale
+kind: site
 target:
   domain: example.com
   path_prefix: /  # proposed: adjust when the primary locale lives under /en/
@@ -22,7 +22,7 @@ lanes:
   community:
     enabled: false  # proposed: enable once query sets are chosen
 # proposed: seeded discovery prompts from the site's claimed category (category not observed)
-# proposed: use these as the prompt_set of a companion ai-engine-lane surface:
+# proposed: use these as the prompt_set of a companion assistant surface:
 #   - "best tools for what example.com offers"
 #   - "Example Domain alternatives"
 #   - "is Example Domain worth it"

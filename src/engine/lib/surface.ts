@@ -1,5 +1,6 @@
 // Surface config loader. A surface is one place a brand can show up: a `site` (a website,
-// or one locale of one) or an `assistant` (an AI answer engine people ask). One yaml
+// or one locale of one), an `assistant` (an AI answer engine people ask), or a `community`
+// (a forum where the brand is discussed). One yaml
 // schema covers every kind, so adding a surface is adding a config file rather than
 // writing new code. Parses + validates one yaml surface file against the fixed field
 // schema and the kind-applicability matrix (which lanes are valid per surface kind, below).
@@ -7,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
 
-export type SurfaceKind = "site" | "assistant" | "community-platform";
+export type SurfaceKind = "site" | "assistant" | "community";
 
 export interface WebLocaleTarget {
   domain: string;
@@ -26,6 +27,13 @@ export interface CommunityPlatformTarget {
   platform: string;
   query_set: string;
 }
+
+// A community surface's `target.platform` names ONE place, and it is read by the
+// collectors rather than being a label: the community lane queries only the platform
+// named here (see src/engine/sense/adapters/community.ts). So the vocabulary is closed to
+// the platforms an adapter actually serves — a value nothing collects would be a surface
+// that silently gathers nothing.
+export const COMMUNITY_PLATFORMS = ["reddit", "hacker-news", "x"];
 export type SurfaceTarget = WebLocaleTarget | AiEngineLaneTarget | CommunityPlatformTarget;
 
 export interface Competitor {
@@ -69,29 +77,30 @@ export function assertSurfaceId(id: string, ctx = "surface"): void {
   }
 }
 
-const KINDS: SurfaceKind[] = ["site", "assistant", "community-platform"];
+const KINDS: SurfaceKind[] = ["site", "assistant", "community"];
 
 // The kinds were renamed to the words the product now leads with: a brand shows up on
-// `site` surfaces and on `assistant` surfaces. There are no users on the old values and
-// no compatibility shim — an old value is a hard config error. But the skill, and any
-// example copied before the rename, may still carry one, so the failure names the
-// replacement instead of only listing the valid set.
+// `site` surfaces, on `assistant` surfaces, and in `community` surfaces. There are no
+// users on the old values and no compatibility shim — an old value is a hard config
+// error. But the skill, and any example copied before a rename, may still carry one, so
+// the failure names the replacement instead of only listing the valid set.
 const RENAMED_KINDS: Record<string, SurfaceKind> = {
   "web-locale": "site",
   "ai-engine-lane": "assistant",
+  "community-platform": "community",
 };
 
 // Kind-applicability matrix: adapters valid per surface kind.
 export const APPLICABLE_LANES: Record<SurfaceKind, string[]> = {
   "site": ["crawl", "performance", "gsc", "bing", "analytics", "competitor", "dataforseo", "community", "x"],
   "assistant": ["geo-panel", "dataforseo"],
-  "community-platform": ["community", "x"],
+  "community": ["community", "x"],
 };
 
 const TARGET_FIELDS: Record<SurfaceKind, string[]> = {
   "site": ["domain", "path_prefix", "locale"],
   "assistant": ["engine", "prompt_set"],
-  "community-platform": ["platform", "query_set"],
+  "community": ["platform", "query_set"],
 };
 
 function fail(msg: string): never {
@@ -116,7 +125,7 @@ export function parseSurface(text: string, ctx = "surface"): Surface {
     const renamed = RENAMED_KINDS[kind];
     if (renamed) {
       fail(
-        `${ctx}: kind "${kind}" was renamed — write "kind: ${renamed}" instead (a brand's surfaces are a site or an assistant; nothing else about the config changes)`,
+        `${ctx}: kind "${kind}" was renamed — write "kind: ${renamed}" instead (a brand's surfaces are a site, an assistant, or a community; nothing else about the config changes)`,
       );
     }
     fail(`${ctx}: kind "${kind}" is not one of ${KINDS.join(" | ")}`);
@@ -138,12 +147,15 @@ export function parseSurface(text: string, ctx = "surface"): Surface {
       }
       continue;
     }
-    requireString(t, f, `${ctx}: target (kind ${kind})`);
+    const value = requireString(t, f, `${ctx}: target (kind ${kind})`);
+    if (kind === "community" && f === "platform" && !COMMUNITY_PLATFORMS.includes(value)) {
+      fail(`${ctx}: target.platform "${value}" has no collector — it must be one of ${COMMUNITY_PLATFORMS.join(" | ")}`);
+    }
   }
   const extra = Object.keys(t).filter((k) => !TARGET_FIELDS[kind].includes(k));
   if (extra.length > 0) fail(`${ctx}: target has fields not in the ${kind} shape: ${extra.join(", ")}`);
 
-  // observes: required for assistant and community-platform, forbidden for site
+  // observes: required for assistant and community, forbidden for site
   const observes = doc.observes;
   if (kind === "site") {
     if (observes !== undefined && observes !== null) fail(`${ctx}: "observes" is forbidden for kind site`);

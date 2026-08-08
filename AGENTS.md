@@ -10,14 +10,21 @@ on the `claude` and `codex` CLIs you are already signed into, so the loop needs 
 
 A **brand** is the top-level object: the thing being made visible. A brand has
 **surfaces**, the places it can show up, and a surface is the engine's unit of work — every
-station runs per surface. Two kinds today:
+station runs per surface. A brand has sites it owns, assistants people ask, and
+communities where it is discussed. Three kinds:
 
 - `kind: site` — a website, or one locale of one
-- `kind: assistant` — an AI answer engine people ask (ChatGPT, Claude)
+- `kind: assistant` — an AI answer engine people ask (ChatGPT, Claude); declares the site
+  surface it `observes`
+- `kind: community` — a forum where the brand is discussed and owns none of the text.
+  `target: {platform, query_set}` where platform is `reddit`, `hacker-news`, or `x`, and
+  it declares what it `observes` too. Lanes: `community`, `x`. The community lane honours
+  the platform named in the target, so one surface is one place.
+  `config/surfaces/example-community-hn.yaml` is the working example.
 
-(`kind: community-platform` also exists and is unchanged.) The old kind names `web-locale`
-and `ai-engine-lane` are gone with no compatibility shim; a config using one is refused
-with a message naming its replacement. **Upgrading an install that already has surface
+The old kind names `web-locale`, `ai-engine-lane` and `community-platform` are gone with
+no compatibility shim; a config using one is refused with a message naming its
+replacement (`site`, `assistant`, `community`). **Upgrading an install that already has surface
 rows:** the rename is not migrated in the database, so rename the `kind:` in each config
 and re-run `onboard <file>` on it — onboard updates the existing row's kind and config
 snapshot in place. A row left on an old kind value still runs, but `infer` falls
@@ -26,6 +33,15 @@ the site or assistant detectors fire, and nothing says so.
 
 `brand add <domain>` is the entry point. It probes the domain, **creates exactly one row —
 the brand** — and writes a `config/surfaces/<id>.proposed.yaml` per discovered surface.
+It proposes `site` and `assistant` surfaces only: a community surface is worth having only
+where a brand has a real presence on a specific platform, and the probe has no evidence of
+that, so inventing a Reddit surface for every brand would be coverage theatre. Write one by
+hand from the example. Each proposed site config lists, as commented-out entries, the competitor
+names the probe read off the brand's own comparison-page titles (the same crawl
+`draft <domain>` runs). `competitors:` itself ships empty and valid: the probe knows the
+name but not the competitor's own URL, and that URL is FETCHED by the competitor lane, so
+it is left for the operator. Uncomment the real ones and supply a URL — the comparison-page
+and outreach generators key off competitor claims, so an empty list is a quieter engine.
 It registers no surface: onboarding is what starts collection, and that stays the
 operator's confirmation. A refusal (an unusable domain, a brand id that already exists)
 writes nothing at all, and the existing-brand check runs before the network probe.
@@ -38,6 +54,15 @@ output (structured result on stdout, nothing else). Verbs:
 - `brand add <domain>` (probe a domain, create the brand, propose its surfaces — the entry point)
 - `brand list|create|alias|negative` (see below) · `onboard <file>` · `draft <domain>` (probe one site, propose one config, create no brand)
 - `run <surface-id>` → `infer` → `decide` → `act` → `verify` (the loop, one station each)
+- what `act` writes, per claim class: fix specs (technical, eligibility), comparison pages
+  (competitor), owned answer pages (brand-defense), tool specs (tool-opportunity), outreach
+  drafts (pages citing competitors and not the brand), and quick-answer **AEO blocks** for
+  `ai-visibility` claims — a 40 to 60 word answer per non-brand discovery prompt from the
+  observing assistant surface's prompt set, for the site's homepage and its generated tool
+  routes, plus a `FAQPage` JSON-LD block over the same set (asset type `fix-spec`). With no
+  `claude` CLI the answers are written `draft-pending`, never invented. Two claim classes,
+  `content-keyword` and `authority`, carry weights but have no detector: nothing emits one,
+  so nothing acts on one.
 - `narrate` · `spec <surface-id> <kind>` where kind is `hreflang` | `site-basics` | `bot-block` | `ssr` (`act` runs every kind whose claim is open and bet on; `spec` is the one-off door into the same generator)
 - `approve <asset-id>` · `reject <asset-id> <reason>` · `publish <asset-id>`
 - `preview <asset-id>` (the generated body itself on stdout)
@@ -105,6 +130,12 @@ it is an arbitrary but deterministic pick, and matching is unaffected because ev
 in the group is an alias. Pick your own by running `brand create` before `db:brands`.
 
 ## Mention counts: measured vs candidate
+
+The DataForSEO lane is keyed on a domain (a backlinks summary and an LLM-mentions search
+for it). The lane matrix allows it on `site` and `assistant` surfaces only (never `community`),
+and an assistant target carries no domain — so there it writes one
+`dataforseo/lane-status@v1/no-domain` gated row and spends nothing: enable it on the site
+surface the assistant observes.
 
 The community and X lanes read a provider's own count for a whole result set, but only
 inspect the first handful of hits — and that handful is the only text a brand's negative

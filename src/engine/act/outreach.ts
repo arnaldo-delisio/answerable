@@ -1,6 +1,9 @@
 // Act station, outreach slice: authority/competitor claims whose evidence names
 // listicle/comparison pages citing competitors but not the brand become outreach-draft
 // assets (send-ready, human-sent: the engine never sends; claim taxonomy authority row).
+// In practice every draft this slice writes comes from a `competitor` claim: `authority`
+// is a reserved class with no detector in src/engine/infer, so the filter below accepts
+// it but nothing produces one.
 //
 // ETHICS GATE (deterministic, before any drafting): the target page's topic must
 // actually cover the brand's category, judged from the evidence row's own

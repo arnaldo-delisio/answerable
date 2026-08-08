@@ -1,5 +1,7 @@
-// Bing sense adapter: full Bing Webmaster API client (url submission quota + rank
-// and traffic stats). Credential-
+// Bing sense adapter: READ-ONLY Bing Webmaster API client. Two GETs:
+// GetUrlSubmissionQuota (how many URLs the account could submit — a coverage signal, not
+// a submission) and GetRankAndTrafficStats. This lane never submits a URL and there is no
+// IndexNow path anywhere in the engine. Credential-
 // gated: without BING_WEBMASTER_KEY it writes exactly one honest key-pending row;
 // with it, real calls. Free after site verification, and worth doing everywhere
 // because ChatGPT's retrieval draws from Bing's index.

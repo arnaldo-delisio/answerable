@@ -1,0 +1,60 @@
+# Community surface: what Hacker News says about Example, measured against the
+# example.com site surface. The third surface kind — a brand has sites it owns,
+# assistants people ask, and communities where it is discussed and it owns none of the
+# text.
+#
+# Keyless: the community lane reads Reddit's public search endpoint and Hacker News via
+# Algolia, so this surface runs on a fresh clone with no credentials at all.
+id: example-community-hn
+kind: community
+target:
+  # One platform per surface, and the lane honours it: this surface collects Hacker News
+  # and nothing else. Copy the file with `platform: reddit` to track that separately.
+  # Valid values are the platforms an adapter actually serves: reddit | hacker-news | x
+  # (`x` is collected by the `x` lane, which needs X_BEARER_TOKEN or the `xurl` CLI).
+  # Reddit's public search refuses some datacenter IPs with a 403; the lane records that
+  # as an honest fail row rather than a zero, and it works from an ordinary connection.
+  platform: hacker-news
+  # A name for the set of queries this surface stands for. It is documentation for the
+  # operator: the queries themselves are derived at collect time from the brand's
+  # identity (its aliases), the competitors below, and `lanes.community.demand_queries`.
+  query_set: brand-and-demand
+# The owned surface these mentions are measured against. It is also where the brand
+# identity comes from when no `brand:` row exists yet, so the mention lanes know which
+# domain's spoken forms count as a mention.
+observes: example-com-en
+audience: >-
+  Founders and freelancers arguing on Hacker News about how to bill clients, and which
+  invoicing tool they gave up on.
+business_goal: >-
+  See what the invoicing conversation says about Example and its alternatives before it
+  reaches a buyer, and find the demand clusters worth answering.
+desired_conversion: signup
+competitors:
+  - name: Northwind Books
+    url: https://northwind.example
+  - name: Contoso Pay
+    url: https://contoso.example
+  - name: Fabrikam Time
+    url: https://fabrikam.example
+publishing:
+  policy: review-required
+  owner: operator
+lanes:
+  community:
+    enabled: true
+    # Demand clusters this surface tracks. Customer specifics live here in config,
+    # never in src/.
+    demand_queries:
+      - freelance invoicing advice
+      - invoicing software recommendations
+      - late paying clients
+# answerable tick runs this surface when the last run is older than the cadence window
+cadence: weekly
+# Empty policy = default class weights
+policy: {}
+# No `brand:` here on purpose: a config may only name a brand that already exists (see
+# example-com-en.yaml). Until one does, identity falls back to the domain of the surface
+# this one `observes`. Create a brand with `answerable brand create <id> <domain>` and add
+# `brand: <id>` here to match on real aliases, and `answerable brand negative <id> <term>`
+# to veto the look-alikes a bare token drags in.
