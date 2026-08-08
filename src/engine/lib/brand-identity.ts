@@ -98,7 +98,7 @@ export function identityFromRow(row: BrandIdentityRow | null | undefined): Brand
 }
 
 // Domain-only identity, derived from a surface config the operator already wrote
-// (an ai-engine-lane's `observes` target and that web surface's `target.domain`).
+// (an assistant's `observes` target and that web surface's `target.domain`).
 // It exists so an operator who has onboarded surfaces but not yet created a brand
 // row still gets REAL matching instead of a fabricated zero: the domain and its
 // spoken form are unambiguous aliases, and there are no negative terms because the

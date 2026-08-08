@@ -49,7 +49,7 @@ function fixtureFetch(file: string): FetchLike {
 
 const surface: Surface = {
   id: "example-com-en",
-  kind: "web-locale",
+  kind: "site",
   target: { domain: "example.com", path_prefix: "/", locale: "en" },
   audience: "fixture",
   business_goal: "fixture",

@@ -1,11 +1,12 @@
-# Search Surface: example.com English web locale (the Search Surface config abstraction: one yaml schema per surface, no new code per surface).
+# Site surface: example.com, English. A surface is one place a brand shows up; one yaml
+# schema covers every kind, so adding a surface is a file, never new code.
 #
 # Example config for a fictional operator: Example, invoicing software for
 # freelancers, on the reserved domain example.com. Copy this file, change the
 # domain, audience, goal, and competitors, and onboard it:
 #   npm run answerable -- onboard config/surfaces/<your-surface>.yaml
 id: example-com-en
-kind: web-locale
+kind: site
 target:
   domain: www.example.com
   path_prefix: /en

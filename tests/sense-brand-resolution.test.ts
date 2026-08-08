@@ -14,7 +14,7 @@ const BRAND = "acme-brand";
 
 const yaml = (id: string, brandKey: string) => `
 id: ${id}
-kind: web-locale
+kind: site
 target:
   domain: www.acme.example
   path_prefix: /
@@ -49,13 +49,13 @@ beforeAll(() => {
     })
     .run();
   db.insert(schema.surfaces)
-    .values({ id: adopted.id, kind: "web-locale", configSnapshot: {}, onboardedAt: 1, brandId: BRAND })
+    .values({ id: adopted.id, kind: "site", configSnapshot: {}, onboardedAt: 1, brandId: BRAND })
     .run();
   db.insert(schema.surfaces)
-    .values({ id: declared.id, kind: "web-locale", configSnapshot: {}, onboardedAt: 1 })
+    .values({ id: declared.id, kind: "site", configSnapshot: {}, onboardedAt: 1 })
     .run();
   db.insert(schema.surfaces)
-    .values({ id: orphan.id, kind: "web-locale", configSnapshot: {}, onboardedAt: 1 })
+    .values({ id: orphan.id, kind: "site", configSnapshot: {}, onboardedAt: 1 })
     .run();
 });
 

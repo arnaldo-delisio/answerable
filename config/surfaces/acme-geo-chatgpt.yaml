@@ -1,6 +1,6 @@
-# Search Surface: ChatGPT AI-answer lane observing acme.example (Search Surface config abstraction: one yaml schema per surface).
+# Assistant surface: what ChatGPT answers, measured against the acme.example site surface.
 id: acme-geo-chatgpt
-kind: ai-engine-lane
+kind: assistant
 target:
   engine: chatgpt
   prompt_set:

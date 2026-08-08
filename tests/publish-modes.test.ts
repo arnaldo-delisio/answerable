@@ -55,7 +55,7 @@ beforeAll(() => {
   db.insert(schema.surfaces)
     .values({
       id: S,
-      kind: "web-locale",
+      kind: "site",
       // No publishing.repo: the spec-handoff branch, which opens no PR.
       configSnapshot: { target: { domain: "example.com" }, publishing: { policy: "review-required", owner: "op" } },
       onboardedAt: 1,
@@ -99,7 +99,7 @@ describe("publish modes", () => {
     db.insert(schema.surfaces)
       .values({
         id: "publish-surface-repo",
-        kind: "web-locale",
+        kind: "site",
         configSnapshot: {
           target: { domain: "example.com" },
           publishing: { policy: "review-required", owner: "op", repo: "///invalid///" },

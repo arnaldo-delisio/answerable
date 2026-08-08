@@ -29,7 +29,7 @@ const S = "mention-surface";
 
 const surfaceYaml = `
 id: ${S}
-kind: web-locale
+kind: site
 target:
   domain: acme.com
   path_prefix: /
@@ -55,7 +55,7 @@ beforeEach(() => {
   db.insert(schema.surfaces)
     .values({
       id: S,
-      kind: "web-locale",
+      kind: "site",
       configSnapshot: { target: { domain: "acme.com" } },
       onboardedAt: Date.now(),
     })

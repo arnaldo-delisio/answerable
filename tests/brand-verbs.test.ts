@@ -27,7 +27,7 @@ import { parseSurface } from "../src/engine/lib/surface";
 
 const lane = parseSurface(`
 id: acme-geo
-kind: ai-engine-lane
+kind: assistant
 target:
   engine: chatgpt
   prompt_set:

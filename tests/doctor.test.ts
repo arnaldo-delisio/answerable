@@ -16,7 +16,7 @@ const NEW_RUN = "aaaa-new-run";
 
 beforeAll(() => {
   db.insert(schema.surfaces)
-    .values({ id: S, kind: "web-locale", configSnapshot: { target: { domain: "example.com" } }, onboardedAt: 1 })
+    .values({ id: S, kind: "site", configSnapshot: { target: { domain: "example.com" } }, onboardedAt: 1 })
     .run();
   db.insert(schema.runs)
     .values({ id: OLD_RUN, surfaceId: S, startedAt: 1_000, stationsRun: [], configSnapshot: {} })

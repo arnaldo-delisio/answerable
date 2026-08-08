@@ -1,14 +1,14 @@
 // Surface config loader: one yaml schema per surface, validated against its kind's
 // applicable adapters/classes/metrics. Enabling a non-applicable lane is a config error
 // naming the lane and the kind, never a silent no-op; target shape must match kind;
-// ai-engine-lane prompt_set is structured {version, prompts[]}.
+// assistant prompt_set is structured {version, prompts[]}.
 
 import { describe, expect, it } from "vitest";
 import { parseSurface, SurfaceConfigError } from "../src/engine/lib/surface";
 
 const base = `
 id: example-com-en
-kind: web-locale
+kind: site
 target:
   domain: www.example.com
   path_prefix: /
@@ -28,7 +28,7 @@ lanes:
 
 const aiLane = `
 id: example-geo-claude
-kind: ai-engine-lane
+kind: assistant
 target:
   engine: claude
   prompt_set:
@@ -45,16 +45,16 @@ lanes:
 `;
 
 describe("parseSurface", () => {
-  it("parses a valid web-locale surface with defaults", () => {
+  it("parses a valid site surface with defaults", () => {
     const s = parseSurface(base);
     expect(s.id).toBe("example-com-en");
-    expect(s.kind).toBe("web-locale");
+    expect(s.kind).toBe("site");
     expect(s.target).toEqual({ domain: "www.example.com", path_prefix: "/", locale: "en" });
     expect(s.policy).toEqual({}); // empty = default class weights from the prioritization score
     expect(s.observes).toBeUndefined();
   });
 
-  it("parses a valid ai-engine-lane surface incl. structured prompt_set", () => {
+  it("parses a valid assistant surface incl. structured prompt_set", () => {
     const s = parseSurface(aiLane);
     expect(s.observes).toBe("example-com-en");
     expect((s.target as { prompt_set: { prompts: string[] } }).prompt_set.prompts).toHaveLength(2);
@@ -63,19 +63,19 @@ describe("parseSurface", () => {
   it("rejects a non-applicable lane, naming both the lane and the kind", () => {
     const text = base + "  geo-panel: { enabled: true }\n";
     expect(() => parseSurface(text)).toThrowError(SurfaceConfigError);
-    expect(() => parseSurface(text)).toThrowError(/lane "geo-panel".*kind "web-locale"/);
+    expect(() => parseSurface(text)).toThrowError(/lane "geo-panel".*kind "site"/);
   });
 
-  it("rejects crawl on an ai-engine-lane surface (matrix, other direction)", () => {
+  it("rejects crawl on an assistant surface (matrix, other direction)", () => {
     expect(() => parseSurface(aiLane.replace("geo-panel:", "crawl:"))).toThrowError(
-      /lane "crawl".*kind "ai-engine-lane"/,
+      /lane "crawl".*kind "assistant"/,
     );
   });
 
-  it("observes is forbidden for web-locale and required for the other kinds", () => {
-    expect(() => parseSurface(base + "observes: other\n")).toThrowError(/forbidden for kind web-locale/);
+  it("observes is forbidden for site and required for the other kinds", () => {
+    expect(() => parseSurface(base + "observes: other\n")).toThrowError(/forbidden for kind site/);
     expect(() => parseSurface(aiLane.replace("observes: example-com-en\n", ""))).toThrowError(
-      /"observes".*required for kind ai-engine-lane/,
+      /"observes".*required for kind assistant/,
     );
   });
 
@@ -85,7 +85,7 @@ describe("parseSurface", () => {
 
   it("rejects target fields outside the kind's shape", () => {
     expect(() => parseSurface(base.replace("  locale: en\n", "  locale: en\n  engine: claude\n"))).toThrowError(
-      /fields not in the web-locale shape: engine/,
+      /fields not in the site shape: engine/,
     );
   });
 
@@ -103,7 +103,7 @@ describe("parseSurface", () => {
   });
 
   it("rejects unknown kind and non-mapping documents", () => {
-    expect(() => parseSurface(base.replace("kind: web-locale", "kind: podcast"))).toThrowError(
+    expect(() => parseSurface(base.replace("kind: site", "kind: podcast"))).toThrowError(
       /kind "podcast" is not one of/,
     );
     expect(() => parseSurface("- just\n- a list\n")).toThrowError(/not a yaml mapping/);

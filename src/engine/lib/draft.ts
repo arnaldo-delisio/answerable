@@ -54,6 +54,23 @@ export function titleOf(html: string): string | null {
   return m ? decodeEntities(stripToText(m[1])) : null;
 }
 
+// A <title> tag is ornament plus one segment that names the site — but which segment is
+// the name is not fixed by position: "Brand | Tagline" and "Tagline | Brand" both occur in
+// the wild (Mailchimp's own <title> is "Die E-Mail-Marketing-Plattform jetzt mit SMS |
+// Mailchimp", brand last). The domain's registrable label is the one signal a site can't
+// disguise, so prefer whichever segment matches it, regardless of position; when no
+// segment matches, fall back to the label itself rather than guessing a position.
+export function brandSegmentFromTitle(title: string, domainLabel: string): string {
+  const segments = title
+    .split(/\s*[|:•·]\s+|\s+[-–—]\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const normalize = (s: string) => s.replace(/[^\p{L}\p{N}]/gu, "").toLowerCase();
+  const target = normalize(domainLabel);
+  const match = segments.find((s) => normalize(s) === target);
+  return match ?? domainLabel;
+}
+
 export function metaDescription(html: string): string | null {
   for (const tag of html.match(/<meta\b[^>]*>/gi) ?? []) {
     const name = extractAttr(tag, "name")?.toLowerCase();
@@ -158,7 +175,7 @@ function competitorsFromTitle(title: string, brand: string): string[] {
   return out;
 }
 
-function yamlQuote(s: string): string {
+export function yamlQuote(s: string): string {
   return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
@@ -169,7 +186,7 @@ function renderProposedYaml(p: Omit<DraftProbe, "yaml" | "yamlPath">): string {
     `# proposed: drafted by \`answerable draft ${p.domain}\`, ${new Date().toISOString().slice(0, 10)}. Review every`,
     `# proposed: field, then rename to ${p.slug}.yaml and \`answerable onboard\` it.`,
     `id: ${p.slug}`,
-    `kind: web-locale`,
+    `kind: site`,
     `target:`,
     `  domain: ${p.domain}`,
     `  path_prefix: /  # proposed: adjust when the primary locale lives under /${primary}/`,
@@ -177,7 +194,7 @@ function renderProposedYaml(p: Omit<DraftProbe, "yaml" | "yamlPath">): string {
   ];
   if (nonPrimary.length > 0) {
     lines.push(`  # proposed: non-primary locales observed on the site; each becomes its own`);
-    lines.push(`  # proposed: web-locale surface file when you want it tracked:`);
+    lines.push(`  # proposed: site surface file when you want it tracked:`);
     for (const l of nonPrimary) lines.push(`  # locale: ${l}`);
   }
   lines.push(
@@ -207,7 +224,7 @@ function renderProposedYaml(p: Omit<DraftProbe, "yaml" | "yamlPath">): string {
     `    enabled: false  # proposed: enable once query sets are chosen`,
     `# proposed: seeded discovery prompts from the site's claimed category` +
       (p.category ? ` ("${p.category.replace(/"/g, "'")}")` : " (category not observed)"),
-    `# proposed: use these as the prompt_set of a companion ai-engine-lane surface:`,
+    `# proposed: use these as the prompt_set of a companion assistant surface:`,
   );
   for (const prompt of p.prompts) lines.push(`#   - ${yamlQuote(prompt)}`);
   lines.push(
@@ -230,7 +247,8 @@ export async function draft(domain: string, projectRoot = process.cwd()): Promis
 
   const title = titleOf(html);
   const jsonLd = jsonLdIdentity(html);
-  const brand = jsonLd.name ?? title?.split(/\s*[|:•·]\s+|\s+[-–—]\s+/)[0]?.trim() ?? cleanDomain.replace(/^www\./, "").split(".")[0];
+  const domainLabel = cleanDomain.replace(/^www\./, "").split(".")[0];
+  const brand = jsonLd.name ?? brandSegmentFromTitle(title ?? "", domainLabel);
   const description = metaDescription(html) ?? jsonLd.description;
   if (extractJsonLdTypes(html).length === 0) notes.push("no JSON-LD on the homepage; brand taken from the title tag");
 

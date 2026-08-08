@@ -27,7 +27,7 @@ const REPO = path.resolve(__dirname, "..");
 // fabricated hit.
 const lane: Surface = parseSurface(`
 id: example-com-en-geo
-kind: ai-engine-lane
+kind: assistant
 target:
   engine: chatgpt
   prompt_set:
@@ -126,7 +126,7 @@ function toIdentityRow(row: StoredBrand): BrandIdentityRow {
   };
 }
 
-const WEB = { id: "example-com-en", kind: "web-locale", config: { target: { domain: "www.example.com" } } };
+const WEB = { id: "example-com-en", kind: "site", config: { target: { domain: "www.example.com" } } };
 
 let brandRow: BrandIdentityRow;
 
@@ -194,7 +194,7 @@ describe("a migrated brand's identity comes from a web target domain, never from
   // identity it displaced would not. The declared key groups surfaces; it is not evidence.
   const declaredWeb = {
     id: "billing-io-en",
-    kind: "web-locale",
+    kind: "site",
     config: { brand: "acme", target: { domain: "billing.io" } },
   };
 
@@ -221,10 +221,10 @@ describe("the result does not depend on which surface is processed first", () =>
   // it never verified. The canonical domain is now chosen across the whole set first.
   const aiLane = {
     id: "acme-geo-chatgpt",
-    kind: "ai-engine-lane",
+    kind: "assistant",
     config: { brand: "acme", target: { engine: "chatgpt" } },
   };
-  const web = { id: "acme-site-en", kind: "web-locale", config: { brand: "acme", target: { domain: "billing.io" } } };
+  const web = { id: "acme-site-en", kind: "site", config: { brand: "acme", target: { domain: "billing.io" } } };
 
   it("produces the same brands and the same grouping in either order", () => {
     const laneFirst = runMigration([aiLane, web]);
@@ -257,12 +257,12 @@ describe("grouping never costs a surface a domain it already matched", () => {
   // miss after. That is the invariant broken directly, by the script meant to preserve it.
   const alphaWeb = {
     id: "alpha-en",
-    kind: "web-locale",
+    kind: "site",
     config: { brand: "multi", target: { domain: "alpha.example" } },
   };
   const zetaWeb = {
     id: "zeta-en",
-    kind: "web-locale",
+    kind: "site",
     config: { brand: "multi", target: { domain: "www.zeta.example" } },
   };
   // The lane whose observed domain is the NON-canonical one: it resolves the stored group
@@ -270,7 +270,7 @@ describe("grouping never costs a surface a domain it already matched", () => {
   // thing standing between it and a fabricated miss.
   const zetaLane = {
     id: "zeta-geo-chatgpt",
-    kind: "ai-engine-lane",
+    kind: "assistant",
     config: { brand: "multi", observes: "zeta-en", target: { engine: "chatgpt" } },
   };
 
@@ -339,17 +339,17 @@ describe("on a db that already has brands, only explicitly declared surfaces are
   };
   const declaredWeb = {
     id: "newco-en",
-    kind: "web-locale",
+    kind: "site",
     config: { brand: "newco", target: { domain: "newco.example" } },
   };
   const declaredLane = {
     id: "newco-geo-chatgpt",
-    kind: "ai-engine-lane",
+    kind: "assistant",
     config: { brand: "newco", observes: "newco-en", target: { engine: "chatgpt" } },
   };
   const undeclared = {
     id: "stranger-en",
-    kind: "web-locale",
+    kind: "site",
     config: { target: { domain: "stranger.example" } },
   };
 
@@ -376,12 +376,12 @@ describe("on a db that already has brands, only explicitly declared surfaces are
     // domainless lane that was waiting for it.
     const laneForIncumbent = {
       id: "incumbent-geo-chatgpt",
-      kind: "ai-engine-lane",
+      kind: "assistant",
       config: { brand: "incumbent", target: { engine: "chatgpt" } },
     };
     const otherDomain = {
       id: "incumbent-alt",
-      kind: "web-locale",
+      kind: "site",
       config: { brand: "incumbent", target: { domain: "hijack.example" } },
     };
     const { brands, grouping } = runMigration([laneForIncumbent, otherDomain], [existing]);
@@ -394,7 +394,7 @@ describe("on a db that already has brands, only explicitly declared surfaces are
   it("leaves a declared group with no domain ungrouped rather than minting a name", () => {
     const domainlessLane = {
       id: "ghost-geo-chatgpt",
-      kind: "ai-engine-lane",
+      kind: "assistant",
       config: { brand: "ghost", target: { engine: "chatgpt" } },
     };
     const { brands, grouping } = runMigration([domainlessLane], [existing]);
@@ -419,12 +419,12 @@ describe("an out-of-scope surface contributes no domain to a brand's identity", 
   // Undeclared, and its domain-derived group id collides with the declared key below.
   const undeclared = {
     id: "stranger-en",
-    kind: "web-locale",
+    kind: "site",
     config: { target: { domain: "acme.com" } },
   };
   const declared = {
     id: "newco-en",
-    kind: "web-locale",
+    kind: "site",
     config: { brand: "acme-com", target: { domain: "other.example" } },
   };
 
@@ -453,7 +453,7 @@ describe("a URL-form target domain is normalized to the host it denotes", () => 
   // acme.com identity the surface had.
   const urlForm = {
     id: "acme-en",
-    kind: "web-locale",
+    kind: "site",
     config: { target: { domain: "https://www.ACME.com:8443/pricing" } },
   };
 

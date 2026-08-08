@@ -23,7 +23,7 @@ function seedAsset(id: string, state: "generated" | "approved" | "published", bo
 
 beforeAll(() => {
   db.insert(schema.surfaces)
-    .values({ id: S, kind: "web-locale", configSnapshot: { target: { domain: "example.com" } }, onboardedAt: 1 })
+    .values({ id: S, kind: "site", configSnapshot: { target: { domain: "example.com" } }, onboardedAt: 1 })
     .run();
   db.insert(schema.runs)
     .values({ id: RUN, surfaceId: S, startedAt: 1, stationsRun: [], configSnapshot: {} })

@@ -29,7 +29,7 @@ const example = identityFromRow(EXAMPLE_ROW)!;
 
 const webYaml = (domain: string) => `
 id: ${domain.replace(/[^a-z0-9]/g, "-")}-en
-kind: web-locale
+kind: site
 target:
   domain: ${domain}
   path_prefix: /
@@ -47,7 +47,7 @@ lanes:
 
 const laneYaml = (observes: string) => `
 id: ${observes}-geo
-kind: ai-engine-lane
+kind: assistant
 target:
   engine: chatgpt
   prompt_set:

@@ -59,7 +59,7 @@ function seedExecVerifiedBet(betId: string): void {
 }
 
 beforeAll(() => {
-  db.insert(schema.surfaces).values({ id: S, kind: "web-locale", configSnapshot: {}, onboardedAt: 1 }).run();
+  db.insert(schema.surfaces).values({ id: S, kind: "site", configSnapshot: {}, onboardedAt: 1 }).run();
   seedRun("run-pre", SHIP - 2 * DAY, 0.4); // pre-ship snapshot
   seedRun("run-post-1", SHIP + 3 * DAY, 0.7);
   seedRun("run-post-2", SHIP + 10 * DAY, 0.9); // latest post-ship snapshot

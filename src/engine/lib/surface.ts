@@ -1,12 +1,13 @@
-// Surface config loader: the Search Surface config abstraction, one yaml schema per
-// surface, so onboarding a surface is adding a config file rather than writing new
-// code. Parses + validates one yaml surface file against the fixed field schema and
-// the kind-applicability matrix (which lanes are valid per surface kind, below).
+// Surface config loader. A surface is one place a brand can show up: a `site` (a website,
+// or one locale of one) or an `assistant` (an AI answer engine people ask). One yaml
+// schema covers every kind, so adding a surface is adding a config file rather than
+// writing new code. Parses + validates one yaml surface file against the fixed field
+// schema and the kind-applicability matrix (which lanes are valid per surface kind, below).
 
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
 
-export type SurfaceKind = "web-locale" | "ai-engine-lane" | "community-platform";
+export type SurfaceKind = "site" | "assistant" | "community-platform";
 
 export interface WebLocaleTarget {
   domain: string;
@@ -68,18 +69,28 @@ export function assertSurfaceId(id: string, ctx = "surface"): void {
   }
 }
 
-const KINDS: SurfaceKind[] = ["web-locale", "ai-engine-lane", "community-platform"];
+const KINDS: SurfaceKind[] = ["site", "assistant", "community-platform"];
+
+// The kinds were renamed to the words the product now leads with: a brand shows up on
+// `site` surfaces and on `assistant` surfaces. There are no users on the old values and
+// no compatibility shim — an old value is a hard config error. But the skill, and any
+// example copied before the rename, may still carry one, so the failure names the
+// replacement instead of only listing the valid set.
+const RENAMED_KINDS: Record<string, SurfaceKind> = {
+  "web-locale": "site",
+  "ai-engine-lane": "assistant",
+};
 
 // Kind-applicability matrix: adapters valid per surface kind.
 export const APPLICABLE_LANES: Record<SurfaceKind, string[]> = {
-  "web-locale": ["crawl", "performance", "gsc", "bing", "analytics", "competitor", "dataforseo", "community", "x"],
-  "ai-engine-lane": ["geo-panel", "dataforseo"],
+  "site": ["crawl", "performance", "gsc", "bing", "analytics", "competitor", "dataforseo", "community", "x"],
+  "assistant": ["geo-panel", "dataforseo"],
   "community-platform": ["community", "x"],
 };
 
 const TARGET_FIELDS: Record<SurfaceKind, string[]> = {
-  "web-locale": ["domain", "path_prefix", "locale"],
-  "ai-engine-lane": ["engine", "prompt_set"],
+  "site": ["domain", "path_prefix", "locale"],
+  "assistant": ["engine", "prompt_set"],
   "community-platform": ["platform", "query_set"],
 };
 
@@ -101,14 +112,22 @@ export function parseSurface(text: string, ctx = "surface"): Surface {
   const id = requireString(doc, "id", ctx);
   assertSurfaceId(id, ctx);
   const kind = requireString(doc, "kind", ctx) as SurfaceKind;
-  if (!KINDS.includes(kind)) fail(`${ctx}: kind "${kind}" is not one of ${KINDS.join(" | ")}`);
+  if (!KINDS.includes(kind)) {
+    const renamed = RENAMED_KINDS[kind];
+    if (renamed) {
+      fail(
+        `${ctx}: kind "${kind}" was renamed — write "kind: ${renamed}" instead (a brand's surfaces are a site or an assistant; nothing else about the config changes)`,
+      );
+    }
+    fail(`${ctx}: kind "${kind}" is not one of ${KINDS.join(" | ")}`);
+  }
 
   // target shape must match kind
   const target = doc.target;
   if (target === null || typeof target !== "object" || Array.isArray(target)) fail(`${ctx}: required field "target" missing or not a mapping`);
   const t = target as Record<string, unknown>;
   for (const f of TARGET_FIELDS[kind]) {
-    if (kind === "ai-engine-lane" && f === "prompt_set") {
+    if (kind === "assistant" && f === "prompt_set") {
       // prompt_set is structured: {version, prompts[]} (list of prompt strings + version)
       const ps = t.prompt_set;
       if (ps === null || typeof ps !== "object" || Array.isArray(ps)) fail(`${ctx}: target.prompt_set must be a mapping {version, prompts}`);
@@ -124,10 +143,10 @@ export function parseSurface(text: string, ctx = "surface"): Surface {
   const extra = Object.keys(t).filter((k) => !TARGET_FIELDS[kind].includes(k));
   if (extra.length > 0) fail(`${ctx}: target has fields not in the ${kind} shape: ${extra.join(", ")}`);
 
-  // observes: required for ai-engine-lane and community-platform, forbidden for web-locale
+  // observes: required for assistant and community-platform, forbidden for site
   const observes = doc.observes;
-  if (kind === "web-locale") {
-    if (observes !== undefined && observes !== null) fail(`${ctx}: "observes" is forbidden for kind web-locale`);
+  if (kind === "site") {
+    if (observes !== undefined && observes !== null) fail(`${ctx}: "observes" is forbidden for kind site`);
   } else if (typeof observes !== "string" || observes.length === 0) {
     fail(`${ctx}: "observes" (owned web surface id) is required for kind ${kind}`);
   }
@@ -191,7 +210,7 @@ export function parseSurface(text: string, ctx = "surface"): Surface {
     id,
     kind,
     target: t as unknown as SurfaceTarget,
-    ...(kind === "web-locale" ? {} : { observes: observes as string }),
+    ...(kind === "site" ? {} : { observes: observes as string }),
     audience,
     business_goal,
     desired_conversion,

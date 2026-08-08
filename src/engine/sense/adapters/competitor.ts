@@ -2,7 +2,7 @@
 // the homepage plus up to 2 obvious tool/comparison pages discovered in the homepage
 // HTML (/tools links, /blog links whose href contains "alternatives" or "vs"); max 3
 // fetches per competitor, 500ms gaps. Plus answer-space ownership computed from the
-// db's existing panel_observations (latest run of each ai-engine-lane surface that
+// db's existing panel_observations (latest run of each assistant surface that
 // observes this surface). Honest fail/pending rows; collect never throws.
 
 import { randomUUID } from "node:crypto";
@@ -144,13 +144,13 @@ interface AnswerOwnership {
   citedFraction: Map<string, number>; // competitor name (lowercase) -> fraction
 }
 
-// Panel rows from the latest run of each ai-engine-lane surface that observes this
+// Panel rows from the latest run of each assistant surface that observes this
 // surface; ownership = fraction of those prompts citing the competitor.
 function loadAnswerOwnership(surface: Surface): AnswerOwnership {
   const observing = db
     .select()
     .from(schema.surfaces)
-    .where(eq(schema.surfaces.kind, "ai-engine-lane"))
+    .where(eq(schema.surfaces.kind, "assistant"))
     .all()
     .filter((s) => (s.configSnapshot as Record<string, unknown>).observes === surface.id);
 
@@ -298,8 +298,8 @@ export async function collect(surface: Surface, runId: string): Promise<CollectR
         "pending",
         {
           competitor: competitor.name,
-          reason: "no panel_observations yet from any ai-engine-lane surface observing this surface",
-          dependency: "geo-panel lane run on an observing ai-engine-lane surface",
+          reason: "no panel_observations yet from any assistant surface observing this surface",
+          dependency: "geo-panel lane run on an observing assistant surface",
           observing_surfaces: ownership.observingSurfaces,
         },
         dbProv,

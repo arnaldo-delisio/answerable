@@ -4,7 +4,7 @@
 // Run: npx tsx scripts/capture-infer-fixture.ts [surface-id]
 //
 // This is an operator tool for capturing a fixture from their OWN db. The fixture the
-// repo ships with (__fixtures__/synthetic-web-locale-run.json) is not a capture: it is
+// repo ships with (__fixtures__/synthetic-site-run.json) is not a capture: it is
 // hand-authored synthetic data in the same shape, so no collected evidence travels
 // with the repo.
 import Database from "better-sqlite3";

@@ -42,7 +42,7 @@ beforeAll(() => {
   db.insert(schema.surfaces)
     .values({
       id: S,
-      kind: "web-locale",
+      kind: "site",
       // Policy override: brand-defense re-weighted from the 1.5 default to 0.5.
       configSnapshot: { policy: { "brand-defense": 0.5 } },
       onboardedAt: 1,

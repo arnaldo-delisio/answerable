@@ -54,7 +54,7 @@ function shareRow(runId: string) {
 
 beforeAll(() => {
   db.insert(schema.surfaces)
-    .values({ id: S, kind: "ai-engine-lane", configSnapshot: runConfig, onboardedAt: 1 })
+    .values({ id: S, kind: "assistant", configSnapshot: runConfig, onboardedAt: 1 })
     .run();
 });
 

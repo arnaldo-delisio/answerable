@@ -1,8 +1,8 @@
 ---
 name: answerable
-description: Drive the Answerable engine from the CLI — audit a site's visibility in Google and AI answers, turn evidence into claims, rank and draft fixes, take them to the human review gate, and verify afterwards whether the change shipped and worked. Use when the user asks to audit, improve, or measure a site's search or AI-answer visibility with this repo.
-version: 1.0.0
-triggers: [answerable, audit my site, search visibility, AI answer visibility, share of answer, run the loop, why don't I show up in ChatGPT]
+description: Drive the Answerable engine from the CLI — add a brand, audit its visibility in Google and AI answers, turn evidence into claims, rank and draft fixes, take them to the human review gate, and verify afterwards that the change actually shipped. Use when the user asks to audit, improve, or measure a brand's search or AI-answer visibility with this repo.
+version: 1.1.0
+triggers: [answerable, brand add, audit my site, search visibility, AI answer visibility, share of answer, run the loop, why don't I show up in ChatGPT]
 tags: [seo, aeo, geo, audit, cli, agent-driven]
 allowed-tools: Bash Read Write
 prerequisites:
@@ -14,7 +14,24 @@ prerequisites:
 
 Answerable is an engine plus a CLI. It collects real evidence about a domain, turns it
 into falsifiable claims, ranks fixes, drafts them, **waits for a human to approve**, and
-afterwards checks separately whether the change went live and whether it moved anything.
+afterwards checks whether the change actually went live.
+
+**The model.** A **brand** is the top-level object: the thing being made visible. A brand
+has **surfaces**, the places it can show up, and the surface is the engine's unit — every
+station runs per surface. Two kinds:
+
+- `kind: site` — a website, or one locale of one
+- `kind: assistant` — an AI answer engine people ask (ChatGPT, Claude); it declares the
+  site surface it `observes`
+
+(`kind: community-platform` exists too.) The old names `web-locale` and `ai-engine-lane`
+were renamed with no compatibility shim — a config using one is refused with a message
+naming its replacement. If you have an example memorised, it is out of date.
+
+**`brand add <domain>` is the entry point.** It probes the domain, creates ONE row (the
+brand), and writes a `config/surfaces/<id>.proposed.yaml` per surface it found. It
+registers no surface: `onboard` is what starts collection, and that is the operator's
+call.
 
 There is no server and no dashboard. The CLI is the whole product surface. Every verb is
 `npx tsx src/cli.ts <verb>` from the repo root (`npm run answerable -- <verb>` is the same
@@ -41,7 +58,7 @@ error, it just finds nothing to work on.
 | act | `act <surface-id>` | **placed bets** | generated assets (fix specs, answer pages, comparison pages, outreach drafts, tool specs) + narration |
 | gate | `approve` / `reject` | a generated asset | approved or rejected state — **human decision, see below** |
 | publish | `publish <asset-id>` | an approved asset | a PR or a spec handoff; the bet moves to `shipped` |
-| verify | `verify <surface-id>` | two runs + shipped bets | run-over-run diff, did-it-go-live check, outcome assessment |
+| verify | `verify <surface-id>` | two runs + shipped bets | run-over-run diff and the did-it-ship check (plus an experimental outcome assessment) |
 | settle | `settle <bet-id> <keep\|revise\|stop>` | an **outcome-assessed** bet | the settlement that feeds future `decide` priors |
 
 `decide` comes after `infer` because it ranks *claims*, and claims only exist once `infer`
@@ -58,8 +75,8 @@ A first pass, end to end:
 
 ```bash
 npx tsx src/cli.ts doctor
-npx tsx src/cli.ts draft acme.com                       # probe a site -> config/surfaces/acme-com.proposed.yaml
-# read and edit that yaml, drop the .proposed, then (if it names a brand, create it first):
+npx tsx src/cli.ts brand add acme.com                   # creates the brand, proposes its surfaces
+# read and edit each proposal, then drop the .proposed:
 mv config/surfaces/acme-com.proposed.yaml config/surfaces/acme-com.yaml
 npx tsx src/cli.ts onboard config/surfaces/acme-com.yaml
 npx tsx src/cli.ts run acme-com --json
@@ -75,8 +92,9 @@ npx tsx src/cli.ts preview <asset-id>                   # read what it wrote, be
 Grouped by what they are for. All of them take `--json`.
 
 **Setup**
+- `brand add <domain>` — the entry point: probe a domain, create the brand, write a proposed config per surface. Refuses (writing nothing) if the brand already exists.
 - `doctor` — credentials, CLIs, db, last run per surface.
-- `draft <domain>` — crawl a site and write a proposed surface config; it prints the path.
+- `draft <domain>` — probe one site and write one proposed site config; creates no brand. Use it to add a site to a brand that already exists.
 - `onboard <file>` — validate and register a surface config (re-onboarding updates it).
 - `brand list` · `brand create <id> <domain>` · `brand alias <id> <term>...` · `brand negative <id> [term]...`
 
@@ -135,6 +153,7 @@ not scrape the human text. Exit code 1 means the verb refused — never a silent
 | `act` (5 bets: 4 fix specs, 1 answer page, 11 narrations) | ~1.8 min |
 | `verify` (includes collecting a run) | ~1 min |
 | `draft <domain>` (12 pages crawled) | ~9 s |
+| `brand add <domain>` (probes the site, its subdomains, robots + sitemap) | ~10-30 s |
 | `tick` with nothing due | ~1.5 s |
 
 Bigger prompt sets and more bets scale these up. Several minutes with stderr progress is
@@ -197,6 +216,14 @@ These are what the product is. Breaking one is worse than not finishing the task
    human to deliver, or a staged answer page. Whether the change actually went live is
    `verify`'s separate, later fact.
 
+6. **`verify` proves one thing: did it ship.** Execution verification re-collects evidence
+   and compares the claim's own check keys, so "exec-verified" means the change is
+   observably live. Say that. The **outcome assessment and the learn priors are
+   experimental**: real and running, but "did it move the number" is search attribution and
+   needs a domain the user controls plus weeks of settled bets before it means anything.
+   The CLI labels the outcome leg experimental in its own output. Never present a prior or
+   an outcome note as proof a fix worked.
+
 ## Where the loop stops on a domain you do not control
 
 Against `example.com`, or any domain the user cannot ship a change to, the loop runs for
@@ -209,7 +236,7 @@ $ npx tsx src/cli.ts verify example-com-en
     crawl/bot-access@v1/GPTBot: required "pass", got "blocked"
       claim evidence: {"http_status":404,...}
       verify run:     {"http_status":404,...}
-  outcome: no exec-verified bets to assess
+  outcome (experimental): no exec-verified bets to assess
 ```
 
 That is `verify` refusing to claim a fix worked when nobody shipped it. No bet reaches
@@ -219,16 +246,17 @@ can ship to: a repo `publish` can PR against, or a spec they can hand-deliver.
 
 ## Notes that save a session
 
-- **`onboard` refuses a config naming a brand that does not exist.** Create it first:
-  `brand create acme acme.com`. Identity comes from the domain only — `create acme acme.com`
+- **`onboard` refuses a config naming a brand that does not exist.** `brand add acme.com`
+  creates it (and proposes the surfaces); `brand create acme acme.com` is the by-hand door. Identity comes from the domain only — `create acme acme.com`
   does *not* make the bare word "Acme" matchable, because bare tokens match ordinary prose.
   `brand alias` is the only way a name becomes matchable, and only because someone typed it.
   `brand create` against an existing id is refused, never merged.
 - **Surface config schema:** `onboard` validates against `src/engine/lib/surface.ts` and
   refuses with `config error: ...`. The shipped `config/surfaces/*.yaml` files are the
-  working examples — a web locale, an AI-answer lane (`kind: ai-engine-lane`, with
-  `observes:` pointing at the web surface it measures). Start from `draft`'s output and one
-  of those, not from memory.
+  working examples — a `site`, and an `assistant` with `observes:` pointing at the site it
+  is measured against. Start from `brand add`'s proposals and one of those, never from
+  memory: a config saying `kind: web-locale` or `kind: ai-engine-lane` is refused, with the
+  new name in the message.
 - **Assets past the gate are never rewritten.** `edit` and `regenerate` work only on assets
   still in `generated`; on `approved`, `published`, `skipped` or `rejected` they refuse and
   leave the stored row byte-identical.

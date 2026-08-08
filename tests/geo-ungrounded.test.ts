@@ -40,7 +40,7 @@ const BRAND = "acme-brand";
 
 const webYaml = (id: string, domain: string) => `
 id: ${id}
-kind: web-locale
+kind: site
 target:
   domain: ${domain}
   path_prefix: /en
@@ -58,7 +58,7 @@ lanes:
 
 const laneYaml = (id: string, observes: string) => `
 id: ${id}
-kind: ai-engine-lane
+kind: assistant
 target:
   engine: chatgpt
   prompt_set:

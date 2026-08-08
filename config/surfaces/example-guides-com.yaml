@@ -1,9 +1,9 @@
-# Search Surface: guides.example.com (the Search Surface config abstraction: one yaml schema per surface, no new code per surface).
+# Site surface: guides.example.com, a second site of the same brand.
 #
 # A second property of the same brand, on its own domain: it inherits priors from
 # the main locale (priors_from) instead of starting cold.
 id: example-guides-com
-kind: web-locale
+kind: site
 target:
   domain: guides.example.com
   path_prefix: /

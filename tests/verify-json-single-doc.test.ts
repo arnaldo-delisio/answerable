@@ -90,7 +90,7 @@ function freshDb(): string {
     .prepare(
       "INSERT INTO surfaces (id, kind, config_snapshot, onboarded_at) VALUES (?, ?, ?, ?)",
     )
-    .run(surfaceId, "web-locale", JSON.stringify({ id: surfaceId, kind: "web-locale", lanes: {} }), Date.now());
+    .run(surfaceId, "site", JSON.stringify({ id: surfaceId, kind: "site", lanes: {} }), Date.now());
   // Exactly one prior run: `diffLastTwoRuns` needs two, so verify must collect a fresh
   // one to reach two total — this is what exercises the "collect internally" path.
   raw

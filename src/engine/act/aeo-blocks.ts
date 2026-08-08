@@ -150,7 +150,7 @@ prompts; the claim's falsifiability condition is exactly that flip.
 `;
 }
 
-// AEO block specs for one surface's open ai-visibility claims (its ai-engine-lane
+// AEO block specs for one surface's open ai-visibility claims (its assistant
 // observers included, mirroring infer/decide): one asset per claim (per engine lane).
 export function generateAeoBlocks(surfaceId: string): AeoBlocksResult {
   const notes: string[] = [];

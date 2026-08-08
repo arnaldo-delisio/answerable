@@ -21,7 +21,7 @@ import { claimedCategory } from "../src/engine/lib/draft";
 
 const base = `
 id: example-com-en
-kind: web-locale
+kind: site
 target:
   domain: www.example.com
   path_prefix: /
@@ -65,12 +65,13 @@ describe("brand-draft pure helpers", () => {
       "https://apps.apple.com/app/id1",
     ]);
   });
-  it("discoveryPrompts seeds from the claimed category, domain fallback otherwise", () => {
-    const withCat = discoveryPrompts("Acme", "Invoicing Software", "www.acme.com");
+  it("discoveryPrompts seeds from a plausible claimed category, brand-only prompts otherwise", () => {
+    const withCat = discoveryPrompts("Acme", "Invoicing Software");
     expect(withCat).toContain("best tools for invoicing software");
     expect(withCat).toContain("Acme alternatives");
-    const noCat = discoveryPrompts("Acme", null, "www.acme.com");
-    expect(noCat[0]).toBe("best tools for what acme.com offers");
+    // No category — never invent one from the domain; fewer, brand-only prompts.
+    const noCat = discoveryPrompts("Acme", null);
+    expect(noCat).toEqual(["Acme alternatives", "is Acme worth it", "what is Acme?"]);
   });
 
   // www.example.com and example.com are one property: the probe must not offer
@@ -124,18 +125,18 @@ describe("facet identity guard", () => {
   };
 
   it("adopts only the same web property, www/apex insensitively", () => {
-    const s = { kind: "web-locale", configSnapshot: { target: { domain: "www.example.com" } } };
-    expect(sameFacet(s, { kind: "web-locale", domain: "example.com" })).toBe(true);
-    expect(sameFacet(s, { kind: "web-locale", domain: "other.com" })).toBe(false);
+    const s = { kind: "site", configSnapshot: { target: { domain: "www.example.com" } } };
+    expect(sameFacet(s, { kind: "site", domain: "example.com" })).toBe(true);
+    expect(sameFacet(s, { kind: "site", domain: "other.com" })).toBe(false);
   });
   it("refuses a kind mismatch", () => {
-    const s = { kind: "ai-engine-lane", configSnapshot: { target: { engine: "chatgpt" } } };
-    expect(sameFacet(s, { kind: "web-locale", domain: "example.com" })).toBe(false);
+    const s = { kind: "assistant", configSnapshot: { target: { engine: "chatgpt" } } };
+    expect(sameFacet(s, { kind: "site", domain: "example.com" })).toBe(false);
   });
   it("refuses a different AI engine", () => {
-    const s = { kind: "ai-engine-lane", configSnapshot: { target: { engine: "chatgpt" } } };
-    expect(sameFacet(s, { kind: "ai-engine-lane", engine: "claude" })).toBe(false);
-    expect(sameFacet(s, { kind: "ai-engine-lane", engine: "chatgpt" })).toBe(true);
+    const s = { kind: "assistant", configSnapshot: { target: { engine: "chatgpt" } } };
+    expect(sameFacet(s, { kind: "assistant", engine: "claude" })).toBe(false);
+    expect(sameFacet(s, { kind: "assistant", engine: "chatgpt" })).toBe(true);
   });
 });
 
@@ -149,7 +150,7 @@ describe("migrate-brands script", () => {
     db.exec(
       "CREATE TABLE surfaces (id TEXT PRIMARY KEY, kind TEXT NOT NULL, config_snapshot TEXT NOT NULL, onboarded_at INTEGER NOT NULL, lifecycle TEXT NOT NULL DEFAULT 'active')",
     );
-    db.prepare("INSERT INTO surfaces VALUES ('a', 'web-locale', ?, 1, 'active')").run(
+    db.prepare("INSERT INTO surfaces VALUES ('a', 'site', ?, 1, 'active')").run(
       JSON.stringify({ brand: "example", target: { domain: "www.example.com" } }),
     );
     db.close();
@@ -177,7 +178,7 @@ describe("migrate-brands script", () => {
     db.exec(
       "CREATE TABLE surfaces (id TEXT PRIMARY KEY, kind TEXT NOT NULL, config_snapshot TEXT NOT NULL, onboarded_at INTEGER NOT NULL, lifecycle TEXT NOT NULL DEFAULT 'active')",
     );
-    db.prepare("INSERT INTO surfaces VALUES ('bare', 'web-locale', '{}', 1, 'active')").run();
+    db.prepare("INSERT INTO surfaces VALUES ('bare', 'site', '{}', 1, 'active')").run();
     db.close();
     execFileSync("npx", ["tsx", path.join(__dirname, "..", "scripts", "migrate-brands.ts")], {
       env: { ...process.env, ANSWERABLE_DB_PATH: empty },
@@ -203,10 +204,10 @@ describe("migrate-brands script", () => {
     db3.exec(
       "CREATE TABLE surfaces (id TEXT PRIMARY KEY, kind TEXT NOT NULL, config_snapshot TEXT NOT NULL, onboarded_at INTEGER NOT NULL, lifecycle TEXT NOT NULL DEFAULT 'active')",
     );
-    db3.prepare("INSERT INTO surfaces VALUES ('com', 'web-locale', ?, 1, 'active')").run(
+    db3.prepare("INSERT INTO surfaces VALUES ('com', 'site', ?, 1, 'active')").run(
       JSON.stringify({ target: { domain: "www.acme.com" } }),
     );
-    db3.prepare("INSERT INTO surfaces VALUES ('io', 'web-locale', ?, 1, 'active')").run(
+    db3.prepare("INSERT INTO surfaces VALUES ('io', 'site', ?, 1, 'active')").run(
       JSON.stringify({ target: { domain: "ACME.io" } }),
     );
     db3.close();
@@ -234,7 +235,7 @@ describe("migrate-brands script", () => {
     db2
       .prepare("INSERT INTO brands (id, name, primary_domain, created_at) VALUES (?,?,?,?)")
       .run("acme", "Acme", "acme.com", Date.now());
-    db2.prepare("INSERT INTO surfaces VALUES ('b', 'web-locale', '{}', 1, 'active', NULL)").run();
+    db2.prepare("INSERT INTO surfaces VALUES ('b', 'site', '{}', 1, 'active', NULL)").run();
     db2.close();
     execFileSync("npx", ["tsx", path.join(__dirname, "..", "scripts", "migrate-brands.ts")], {
       env: { ...process.env, ANSWERABLE_DB_PATH: dbPath },

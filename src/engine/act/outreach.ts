@@ -56,7 +56,7 @@ function brandTokenFor(surfaceId: string): string | null {
   const config = s?.configSnapshot as { target?: { domain?: string }; observes?: string } | undefined;
   const domain = config?.target?.domain;
   if (domain) return domain.replace(/^www\./, "").split(".")[0].toLowerCase();
-  // ai-engine-lane/community surfaces: brand comes from the observed web surface.
+  // assistant/community surfaces: brand comes from the observed web surface.
   if (config?.observes) return brandTokenFor(config.observes);
   return null;
 }
@@ -179,7 +179,7 @@ ${emailBody}
 
 // ---- entry ---------------------------------------------------------------
 
-// Outreach assets for one surface's authority/competitor claims. Includes ai-engine-lane
+// Outreach assets for one surface's authority/competitor claims. Includes assistant
 // and community surfaces observing a web surface, mirroring infer/decide.
 export function generateOutreachDrafts(surfaceId: string): OutreachResult {
   const notes: string[] = [];

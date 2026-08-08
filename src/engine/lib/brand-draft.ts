@@ -19,6 +19,7 @@ import {
   localesFromHreflang,
   localesFromPaths,
   claimedCategory,
+  brandSegmentFromTitle,
 } from "./draft";
 import { extractAttr } from "../sense/adapters/crawl";
 
@@ -178,10 +179,122 @@ export function extractHrefs(html: string, baseUrl: string): string[] {
   return out;
 }
 
+// A raw <title> or JSON-LD name can carry page ornament — icons rendered as
+// glyphs ("</> htmx"), ASCII art, emoji, separator junk — that must never reach
+// a prompt a human or an AI answer engine will read. Strip anything that isn't
+// a letter, digit, or the handful of punctuation marks a real brand name can
+// contain (&, ', ., -), collapse whitespace, and if nothing plausible survives
+// fall back to the registrable domain's label: the domain is always defensible,
+// where a "cleaned" guess at the operator's intent is not.
+// A title with no separator at all (some marketing sites ship a <title> that is
+// pure tagline, with the brand name absent from it entirely — trello.com's is
+// "Capture, organize, and tackle your to-dos from anywhere") leaves the whole
+// sentence as the "name" candidate once ornament is stripped. Brand names run
+// short; a five-plus-word survivor reads as a sentence, not a name, so it falls
+// back the same way an empty/ornament-only survivor does.
+const MAX_NAME_WORDS = 5;
+
+export function cleanBrandToken(raw: string, domainLabel: string): string {
+  const stripped = raw
+    .replace(/[^\p{L}\p{N}\s&'.-]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!stripped || !/[\p{L}\p{N}]/u.test(stripped)) return domainLabel;
+  if (stripped.split(" ").length > MAX_NAME_WORDS) return domainLabel;
+  return stripped;
+}
+
+// Hype/superlative words that mark a phrase as marketing copy ("high power
+// tools", "the ultimate server") rather than a category name ("project
+// management software"): a category names a class of thing; a tagline sells
+// it. Checked anywhere in the phrase, not just the opening word — "the" alone
+// is too common a word in genuine category names ("the developer platform")
+// to blocklist, but "the ultimate X" is caught via "ultimate".
+const HYPE_WORDS = new Set([
+  "best", "high", "top", "leading", "powerful", "ultimate", "great", "amazing",
+  "revolutionary", "innovative", "premium", "super", "world-class",
+  "next-gen", "easy", "simple", "fast", "smart", "all-in-one", "simply",
+]);
+// Verbs that put a phrase in imperative/marketing-pitch shape ("power your
+// workflow", "build anything") rather than noun-phrase shape ("workflow
+// automation software").
+const PITCH_VERBS = new Set([
+  "get", "build", "create", "boost", "unlock", "simplify", "supercharge",
+  "manage", "grow", "scale", "automate", "launch", "transform", "optimize",
+  "empower", "power",
+]);
+
+// Judge whether an extracted title/description segment plausibly names a
+// product category and is therefore safe to interpolate into a prompt, versus
+// a slogan or tagline that would turn into a question nobody asks. Concrete,
+// defensible signals only: short and noun-phrase shaped (word/length caps, no
+// hype word or pitch verb anywhere in it), and free of marketing punctuation
+// or leftover ornament.
+// isPlausibleCategory judges by BLOCKLISTING English marketing language (HYPE_WORDS,
+// PITCH_VERBS): it can only rule against text it recognizes as English prose. A category
+// claimed in another language contains none of those English words either — not because
+// it was judged a good category, but because the rule cannot read it — and waving it
+// through on that technicality is a fail-open bug (observed live: `brand add stripe.com`
+// run from a German-hosted box got served "Online-Bezahldienst und
+// Zahlungsdienstleister" and it sailed past every English-only check). So before judging
+// plausibility at all, require positive evidence the phrase is assessable: at least one
+// word drawn from a small set of English function words and the category-shaped nouns a
+// genuine category phrase almost always contains or ends in ("… software", "… platform",
+// "… service"). Absence from this list is not proof the phrase is bad — only proof this
+// rule cannot tell — and "cannot tell" fails closed exactly like "implausible" does,
+// never open. This is a short allowlist, not a language-detection dependency: it trades
+// a false degrade on a terse English category (rare, and only makes the proposal ask the
+// operator to confirm) for never interpolating an unjudged phrase into a live prompt.
+const ENGLISH_ASSESSABLE_WORDS = new Set([
+  "the", "a", "an", "of", "for", "and", "or", "with", "your", "online",
+  "software", "platform", "tool", "tools", "service", "services",
+  "solution", "solutions", "app", "apps", "system", "systems",
+  "management", "marketing", "analytics", "provider", "providers",
+  "company", "product", "products", "store", "shop",
+]);
+
+// True when the phrase carries positive evidence of being assessable English (see
+// ENGLISH_ASSESSABLE_WORDS above). Exported separately from isPlausibleCategory so the
+// proposal's evidence comment can say WHY a category degraded — unassessable-language
+// versus tagline-shaped — rather than collapsing both into one unexplained "implausible".
+export function isAssessableCategory(candidate: string): boolean {
+  const c = candidate.trim();
+  if (!c || c.length > 60) return false;
+  if (/[^\p{L}\p{N}\s&/,'-]/u.test(c)) return false; // ornament/symbols/emoji: unreadable either way
+  const words = c
+    .toLowerCase()
+    .split(/\s+/)
+    .map((w) => w.replace(/[,.]+$/, ""))
+    .filter(Boolean);
+  return words.length > 0 && words.some((w) => ENGLISH_ASSESSABLE_WORDS.has(w));
+}
+
+export function isPlausibleCategory(candidate: string): boolean {
+  const c = candidate.trim();
+  if (!c || c.length > 60) return false;
+  if (/[!™®©]|\.\.\.|--/.test(c)) return false; // marketing punctuation
+  if (/[^\p{L}\p{N}\s&/,'-]/u.test(c)) return false; // ornament/symbols/emoji
+  if (!isAssessableCategory(c)) return false; // cannot judge it: fail closed, not open
+  const words = c
+    .toLowerCase()
+    .split(/\s+/)
+    .map((w) => w.replace(/[,.]+$/, "")) // trailing punctuation must not dodge the stoplist match
+    .filter(Boolean);
+  if (words.length === 0 || words.length > 6) return false;
+  if (words.some((w) => HYPE_WORDS.has(w) || PITCH_VERBS.has(w))) return false;
+  return true;
+}
+
 // The standard discovery prompt-set (same grammar as draft.ts's seeded prompts),
-// seeded from the site's own claimed category.
-export function discoveryPrompts(brand: string, category: string | null, domain: string): string[] {
-  const categoryPhrase = (category ?? `what ${domain.replace(/^www\./, "")} offers`).toLowerCase();
+// seeded from the site's own claimed category — but only when that category
+// passes isPlausibleCategory. An implausible or absent category degrades to
+// fewer, brand-only prompts (alternatives / worth-it / what-is) rather than
+// inventing a category-shaped question the site never claimed: fewer good
+// prompts beat more bad ones.
+export function discoveryPrompts(brand: string, category: string | null): string[] {
+  const brandOnly = [`${brand} alternatives`, `is ${brand} worth it`, `what is ${brand}?`];
+  if (!category || !isPlausibleCategory(category)) return brandOnly;
+  const categoryPhrase = category.toLowerCase();
   return [
     `best tools for ${categoryPhrase}`,
     `${brand} alternatives`,
@@ -205,7 +318,7 @@ async function probeProperty(
   unreachable: UnreachableProbe[],
 ): Promise<WebsiteFacet> {
   const url = `https://${host}/`;
-  const res = await safeFetch(url);
+  const res = await safeFetch(url, { headers: { "Accept-Language": PROBE_ACCEPT_LANGUAGE } });
   const evidence: FacetEvidence[] = [];
   if (!res.ok || !res.body) {
     const error = res.error ?? `http ${res.status}`;
@@ -232,6 +345,20 @@ async function probeProperty(
   };
 }
 
+// The probe sent no Accept-Language, so a site that language-negotiates on the header
+// (most do) served whatever the crawling box's network location implied — observed live:
+// the same domain probed from a German-hosted box came back in German, and that leaked
+// into the seeded prompts. Two operators running the identical command on the same brand
+// must get the same result regardless of where their server happens to sit, so the probe
+// now asks explicitly. This does not silently force English on a non-English brand: it
+// makes the choice visible (recorded in the proposal's evidence below) so the operator
+// can see what language the probe actually got and override the claimed category by hand
+// if their market isn't English. No config surface exists yet to pass a different value
+// in; the site config's own `locale:` field (brand-add.ts) is populated FROM what the
+// probe observes (hreflang/sitemap paths), not a knob for driving the probe's request, so
+// there is nothing existing to wire this to.
+const PROBE_ACCEPT_LANGUAGE = "en";
+
 export async function draftBrand(domain: string): Promise<BrandProposal> {
   const notes: string[] = [];
   const unreachable: UnreachableProbe[] = [];
@@ -240,7 +367,7 @@ export async function draftBrand(domain: string): Promise<BrandProposal> {
   const origin = `https://${seedHost}`;
 
   // 1. Homepage: identity + locales + links.
-  const home = await safeFetch(`${origin}/`);
+  const home = await safeFetch(`${origin}/`, { headers: { "Accept-Language": PROBE_ACCEPT_LANGUAGE } });
   const html = home.ok && home.body ? home.body : "";
   if (!html) {
     const error = home.error ?? `http ${home.status}`;
@@ -249,12 +376,12 @@ export async function draftBrand(domain: string): Promise<BrandProposal> {
   }
   const title = titleOf(html);
   const jsonLd = jsonLdIdentity(html);
-  const name =
-    jsonLd.name ??
-    title?.split(/\s*[|:•·]\s+|\s+[-–—]\s+/)[0]?.trim() ??
-    apex.split(".")[0];
+  const apexLabel = apex.split(".")[0];
+  const rawName = jsonLd.name ?? brandSegmentFromTitle(title ?? "", apexLabel);
+  const name = cleanBrandToken(rawName, apexLabel);
   const description = metaDescription(html) ?? jsonLd.description;
   const category = claimedCategory(title, description, name);
+  const categoryUsable = category !== null && isPlausibleCategory(category);
 
   // One property, one facet: if the site declares the www/apex sibling of the
   // seed canonical, that is the form it wants to be addressed by (and the form
@@ -380,14 +507,19 @@ export async function draftBrand(domain: string): Promise<BrandProposal> {
   // regardless of what the probe reached (a real GEO panel run found zero
   // discovery-share for a comparable brand across two AI-answer lanes; that zero
   // is a finding worth surfacing, not an absence to skip proposing).
-  const prompts = discoveryPrompts(name, category, seedHost);
+  const prompts = discoveryPrompts(name, category);
   const laneEvidence: FacetEvidence[] = [
     {
-      observed: category
+      observed: categoryUsable
         ? `discovery prompts seeded from the site's claimed category ("${category}")`
-        : "discovery prompts seeded from the domain (no category observed on the site)",
+        : category
+          ? category !== null && isAssessableCategory(category)
+            ? `discovery prompts seeded from brand-only questions — claimed category ("${category}") reads as a tagline, not a product category; supply a real one`
+            : `discovery prompts seeded from brand-only questions — claimed category ("${category}") could not be assessed (probed with Accept-Language: ${PROBE_ACCEPT_LANGUAGE}; this does not read as English); supply a real category in the market's own language`
+          : "discovery prompts seeded from brand-only questions (no category observed on the site)",
       where: `${origin}/`,
     },
+    { observed: `site probed with Accept-Language: ${PROBE_ACCEPT_LANGUAGE}`, where: `${origin}/` },
   ];
   // Each lane owns its arrays, never a shared instance: serializers that dedupe
   // repeated objects into references corrupt the second lane on a round trip.

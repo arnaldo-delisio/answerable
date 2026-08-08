@@ -80,7 +80,7 @@ export async function ssrfReject(rawUrl: string): Promise<string | null> {
 // manually with per-hop validation. Same never-throws FetchOutcome contract.
 export async function safeFetch(
   rawUrl: string,
-  opts: { method?: string; userAgent?: string } = {},
+  opts: { method?: string; userAgent?: string; headers?: Record<string, string> } = {},
 ): Promise<FetchOutcome> {
   let url = rawUrl;
   for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop++) {

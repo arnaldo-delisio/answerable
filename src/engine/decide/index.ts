@@ -5,7 +5,7 @@
 // Only `open` claims are bet-eligible. Creates bets (state placed) for the top-ranked
 // claims not already bet on; re-scores standing placed bets so the queue reflects
 // today's policy and priors. A scoring failure is a visible note, never a throw that
-// kills the run. Like infer, deciding a web surface also decides the ai-engine-lane
+// kills the run. Like infer, deciding a web surface also decides the assistant
 // surfaces observing it.
 
 import { and, eq, like } from "drizzle-orm";
@@ -223,7 +223,7 @@ function decideOne(surfaceId: string): DecideResult | null {
   return { surfaceId, ranked, placed, rescored, notes };
 }
 
-// Decide for a surface; a web-locale surface also decides the ai-engine-lane surfaces
+// Decide for a surface; a site surface also decides the assistant surfaces
 // observing it (their claims live on the observing surface), mirroring infer.
 export function decide(surfaceId: string): DecideResult[] {
   const own = decideOne(surfaceId);

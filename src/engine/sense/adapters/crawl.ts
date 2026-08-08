@@ -1,6 +1,6 @@
 // Crawl sense adapter: robots per-bot, sitemap, hreflang, canonicals, schema, SSR,
 // AI-bot access probes, Content-Signal + noai. This lane runs live for every
-// web-locale surface; crawl-class checks do not apply to ai-engine-lane or
+// site surface; crawl-class checks do not apply to assistant or
 // community-platform surfaces.
 // Polite: sequential fetches with 300ms gaps, 10s timeouts. Every fetch failure writes
 // an honest "fail" evidence row; collect never throws for a network-level problem.
@@ -49,14 +49,15 @@ export interface FetchOutcome {
 // Exported for reuse by the draft prober (answerable draft <domain>) via safe-fetch.ts.
 export async function politeFetch(
   url: string,
-  opts: { method?: string; userAgent?: string; redirect?: "follow" | "manual" } = {},
+  opts: { method?: string; userAgent?: string; redirect?: "follow" | "manual"; headers?: Record<string, string> } = {},
 ): Promise<FetchOutcome> {
   await sleep(GAP_MS);
   const fetchedAt = Date.now();
   try {
+    const headers = { ...opts.headers, ...(opts.userAgent ? { "user-agent": opts.userAgent } : {}) };
     const res = await fetch(url, {
       method: opts.method ?? "GET",
-      headers: opts.userAgent ? { "user-agent": opts.userAgent } : undefined,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
       redirect: opts.redirect ?? "follow",
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });

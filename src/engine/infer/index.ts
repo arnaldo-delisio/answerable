@@ -185,7 +185,7 @@ const push = (out: ClaimReport[], r: ClaimReport | null) => {
   if (r) out.push(r);
 };
 
-// ---- rule-based detectors: web-locale crawl evidence ----------------------
+// ---- rule-based detectors: site crawl evidence ----------------------
 
 function detectHreflang(surfaceId: string, runId: string, rows: EvidenceRow[], out: ClaimReport[]): void {
   const hreflang = rows.filter((r) => r.checkKey.startsWith("crawl/hreflang@"));
@@ -459,7 +459,7 @@ function detectToolOpportunities(
   }
 }
 
-// ---- rule-based detectors: ai-engine-lane panel aggregates ----------------
+// ---- rule-based detectors: assistant panel aggregates ----------------
 
 // Brand token from the observed web surface's domain, e.g. www.example.com -> "example".
 function brandToken(observedSurfaceId: string | null): string | null {
@@ -736,7 +736,7 @@ function inferOne(surfaceId: string): InferResult | null {
   const out: ClaimReport[] = [];
   const notes: string[] = [];
   const detectors: [string, () => void][] =
-    surface.kind === "web-locale"
+    surface.kind === "site"
       ? [
           ["hreflang", () => detectHreflang(surfaceId, run.id, rows, out)],
           ["hreflang-partial", () => detectHreflangPartial(surfaceId, run.id, rows, out)],
@@ -747,7 +747,7 @@ function inferOne(surfaceId: string): InferResult | null {
           ["tool-opportunity", () => detectToolOpportunities(surfaceId, run.id, rows, (surface.configSnapshot as { lanes?: Record<string, unknown> }).lanes ?? {}, out, notes)],
           ["llm-sentiment", () => runLlmInterpretation(surfaceId, run.id, rows, out, notes)],
         ]
-      : surface.kind === "ai-engine-lane"
+      : surface.kind === "assistant"
         ? [["panel", () => detectPanelClaims(surfaceId, run.id, rows, panel, config.observes ?? null, out, notes)]]
         : [["llm-sentiment", () => runLlmInterpretation(surfaceId, run.id, rows, out, notes)]];
 
@@ -762,8 +762,8 @@ function inferOne(surfaceId: string): InferResult | null {
   return { surfaceId, runId: run.id, claims: out, notes };
 }
 
-// Infer for a surface's latest run. A web-locale surface also runs inference for the
-// ai-engine-lane surfaces observing it (their claims live on the observing surface,
+// Infer for a surface's latest run. A site surface also runs inference for the
+// assistant surfaces observing it (their claims live on the observing surface,
 // per the kind-applicability matrix), so `answerable infer <web-surface>` covers the panel
 // aggregates that measure it.
 export function infer(surfaceId: string): InferResult[] {

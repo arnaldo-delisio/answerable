@@ -1,7 +1,7 @@
-# Search Surface: acme.example web-locale — a SECOND brand, so brand scoping in the
+# Site surface: acme.example — a SECOND brand, so brand scoping in the
 # queues and rollups has two brands' data to separate (scripts/fixture-second-brand.ts).
 id: acme-example
-kind: web-locale
+kind: site
 target:
   domain: acme.example
   path_prefix: /

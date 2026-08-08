@@ -62,6 +62,14 @@ function getBrand(id: string): BrandRow | undefined {
   return db.select().from(schema.brands).where(eq(schema.brands.id, id)).get();
 }
 
+// Existence read, for callers that must refuse BEFORE doing expensive work (`brand add`
+// probes a live domain over the network; discovering the duplicate afterwards would
+// spend a minute to reach a refusal that was knowable up front). The refusal itself
+// still belongs to createBrand — this only lets a caller reach it sooner.
+export function brandExists(id: string): boolean {
+  return getBrand(id.trim().toLowerCase()) !== undefined;
+}
+
 // Validate a list of operator-typed terms BEFORE storing it. normalizeTerms silently
 // drops what it cannot keep (blank, over-long, past the list cap); silence is the wrong
 // answer for a term the operator explicitly asked to match on, so each rejection is

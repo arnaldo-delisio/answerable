@@ -1,7 +1,7 @@
 // Infer detectors against a hand-authored SYNTHETIC fixture in the shape a real run
-// produces: src/engine/infer/__fixtures__/synthetic-web-locale-run.json, one fictional
+// produces: src/engine/infer/__fixtures__/synthetic-site-run.json, one fictional
 // invoicing product on three locales (en, es, de), with every evidence family the
-// web-locale detector set reads and a deliberate partial-hreflang page so the
+// site detector set reads and a deliberate partial-hreflang page so the
 // locale-subset branch stays exercised. No collected data travels in it. Asserts the
 // claims minted (classes, the decomposed prioritization score's numeric
 // confidence values, falsifiability) and the falsification path when a later run's
@@ -44,7 +44,7 @@ interface Fixture {
 }
 
 const fixture: Fixture = JSON.parse(
-  readFileSync(path.join(__dirname, "../src/engine/infer/__fixtures__/synthetic-web-locale-run.json"), "utf8"),
+  readFileSync(path.join(__dirname, "../src/engine/infer/__fixtures__/synthetic-site-run.json"), "utf8"),
 );
 const S = fixture.surface.id;
 
@@ -78,7 +78,7 @@ function loadRun(runId: string, startedAt: number, evidence: Fixture["evidence"]
 let first: InferResult;
 
 beforeAll(() => {
-  // Shape, not volume: the fixture must carry every evidence family the web-locale
+  // Shape, not volume: the fixture must carry every evidence family the site
   // detector set reads, so a detector cannot go silently untested. This is a MORE
   // RELEVANT guard than the row count it replaced, not a strictly stronger one:
   // it asserts the detectors' inputs exist rather than counting rows, and neither
@@ -101,7 +101,7 @@ beforeAll(() => {
   db.insert(schema.surfaces)
     .values({
       id: S,
-      kind: fixture.surface.kind as "web-locale",
+      kind: fixture.surface.kind as "site",
       configSnapshot: JSON.parse(fixture.surface.config_snapshot),
       onboardedAt: fixture.surface.onboarded_at,
     })
@@ -110,8 +110,8 @@ beforeAll(() => {
   first = infer(S)[0];
 });
 
-describe("infer on the synthetic web-locale run", () => {
-  it("runs the web-locale detector set without any detector failure", () => {
+describe("infer on the synthetic site run", () => {
+  it("runs the site detector set without any detector failure", () => {
     expect(first.runId).toBe(fixture.run.id);
     expect(first.notes.some((n) => n.startsWith("detector") && n.includes("failed"))).toBe(false);
     expect(first.notes.some((n) => n.includes("llm interpretation skipped"))).toBe(true);
@@ -225,7 +225,7 @@ describe("infer's tool-opportunity detector respects the community lane's enable
     db.insert(schema.surfaces)
       .values({
         id: surfaceId,
-        kind: fixture.surface.kind as "web-locale",
+        kind: fixture.surface.kind as "site",
         configSnapshot: cfg,
         onboardedAt: fixture.surface.onboarded_at,
       })

@@ -13,7 +13,7 @@ let seq = 0;
 
 function seedSurface(id: string): void {
   db.insert(schema.surfaces)
-    .values({ id, kind: "web-locale", configSnapshot: {}, onboardedAt: 1 })
+    .values({ id, kind: "site", configSnapshot: {}, onboardedAt: 1 })
     .run();
   db.insert(schema.runs)
     .values({ id: `run:${id}`, surfaceId: id, startedAt: 1, stationsRun: [], configSnapshot: {} })

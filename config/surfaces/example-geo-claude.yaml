@@ -1,8 +1,8 @@
-# Search Surface: Claude AI-answer lane observing example.com (Search Surface config abstraction: one yaml schema per surface).
+# Assistant surface: what Claude answers, measured against the example.com site surface.
 # Prompt set: the discovery and reputation questions a buyer actually asks an
 # answer engine before choosing a tool.
 id: example-geo-claude
-kind: ai-engine-lane
+kind: assistant
 target:
   engine: claude
   prompt_set:

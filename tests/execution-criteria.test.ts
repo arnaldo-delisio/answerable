@@ -82,7 +82,7 @@ function seedVerifyEvidence(checkKey: string, status: string): void {
 }
 
 beforeAll(() => {
-  db.insert(schema.surfaces).values({ id: S, kind: "web-locale", configSnapshot: {}, onboardedAt: 1 }).run();
+  db.insert(schema.surfaces).values({ id: S, kind: "site", configSnapshot: {}, onboardedAt: 1 }).run();
   db.insert(schema.runs)
     .values({ id: VERIFY_RUN, surfaceId: S, startedAt: 1, stationsRun: [], configSnapshot: {} })
     .run();

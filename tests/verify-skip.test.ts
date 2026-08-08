@@ -49,7 +49,7 @@ function seedBet(id: string): typeof schema.bets.$inferSelect {
 
 beforeAll(() => {
   db.insert(schema.surfaces)
-    .values({ id: S, kind: "web-locale", configSnapshot: { target: { domain: "example.com" } }, onboardedAt: 1 })
+    .values({ id: S, kind: "site", configSnapshot: { target: { domain: "example.com" } }, onboardedAt: 1 })
     .run();
   for (const id of [RUN, VERIFY_RUN]) {
     db.insert(schema.runs)

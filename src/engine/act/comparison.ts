@@ -188,7 +188,7 @@ this page can be approved for publishing.
 `;
 }
 
-// Comparison pages for one surface's open competitor claims (its ai-engine-lane and
+// Comparison pages for one surface's open competitor claims (its assistant and
 // community observers included, mirroring infer/decide). One asset per competitor,
 // deduped across claims (first claim with a bet wins the attachment).
 export function generateComparisonPages(surfaceId: string): ComparisonResult {

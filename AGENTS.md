@@ -1,17 +1,42 @@
 # Answerable, agent guide
 
-Give it a domain: it finds what's holding the site back in Google and AI answers,
-generates the fix, gates every world-touching act behind one human approval, and proves
-whether it worked. The CLI is the whole product surface, and it is built to be driven by
-an agent: every verb takes `--json`, and the interpretation lanes run on the `claude` and
-`codex` CLIs you are already signed into, so the loop needs no API keys.
+Give it a domain: it finds what's holding a brand back in Google and AI answers,
+generates the fix, gates every world-touching act behind one human approval, and verifies
+that the approved change actually shipped. The CLI is the whole product surface, and it is
+built to be driven by an agent: every verb takes `--json`, and the interpretation lanes run
+on the `claude` and `codex` CLIs you are already signed into, so the loop needs no API keys.
+
+## The model
+
+A **brand** is the top-level object: the thing being made visible. A brand has
+**surfaces**, the places it can show up, and a surface is the engine's unit of work — every
+station runs per surface. Two kinds today:
+
+- `kind: site` — a website, or one locale of one
+- `kind: assistant` — an AI answer engine people ask (ChatGPT, Claude)
+
+(`kind: community-platform` also exists and is unchanged.) The old kind names `web-locale`
+and `ai-engine-lane` are gone with no compatibility shim; a config using one is refused
+with a message naming its replacement. **Upgrading an install that already has surface
+rows:** the rename is not migrated in the database, so rename the `kind:` in each config
+and re-run `onboard <file>` on it — onboard updates the existing row's kind and config
+snapshot in place. A row left on an old kind value still runs, but `infer` falls
+through to its default branch and runs only the generic LLM-sentiment detector — none of
+the site or assistant detectors fire, and nothing says so.
+
+`brand add <domain>` is the entry point. It probes the domain, **creates exactly one row —
+the brand** — and writes a `config/surfaces/<id>.proposed.yaml` per discovered surface.
+It registers no surface: onboarding is what starts collection, and that stays the
+operator's confirmation. A refusal (an unusable domain, a brand id that already exists)
+writes nothing at all, and the existing-brand check runs before the network probe.
 
 ## CLI
 
 Every command is `npx tsx src/cli.ts <verb>` and takes `--json` for machine-readable
 output (structured result on stdout, nothing else). Verbs:
 
-- `brand list|create|alias|negative` (see below) · `onboard <file>` · `draft <domain>` (probe a site, propose a config)
+- `brand add <domain>` (probe a domain, create the brand, propose its surfaces — the entry point)
+- `brand list|create|alias|negative` (see below) · `onboard <file>` · `draft <domain>` (probe one site, propose one config, create no brand)
 - `run <surface-id>` → `infer` → `decide` → `act` → `verify` (the loop, one station each)
 - `narrate` · `spec <surface-id> <kind>` where kind is `hreflang` | `site-basics` | `bot-block` | `ssr` (`act` runs every kind whose claim is open and bet on; `spec` is the one-off door into the same generator)
 - `approve <asset-id>` · `reject <asset-id> <reason>` · `publish <asset-id>`
@@ -39,10 +64,12 @@ else, so it pipes.
 ## Brands: what the engine matches on
 
 A brand groups surfaces and carries the identity every mention lane matches against.
-`onboard` refuses a config whose `brand:` names a brand that does not exist, so `brand
-create` comes first:
+`onboard` refuses a config whose `brand:` names a brand that does not exist, so the brand
+comes first — `brand add` for a real domain, `brand create` when you are wiring one by
+hand:
 
 ```bash
+answerable brand add acme.com                  # probe, create the brand, propose its surfaces
 answerable brand list                          # ids, primary domains, aliases, negative terms
 answerable brand create acme acme.com          # aliases seeded: "acme.com", "acme com"
 answerable brand alias acme "Acme Labs"        # add an alias (additive)
@@ -61,7 +88,11 @@ its `negativeTerms` veto a match; nothing else. So:
 - `alias` is the only way a bare name ever becomes matchable, and only because you typed
   it. Nothing is enabled on your behalf.
 - `create` against an existing id is REFUSED, never merged: a merge would rewrite an
-  identity you own from an argument meant to create a new one.
+  identity you own from an argument meant to create a new one. `brand add` refuses the same
+  way, before it probes.
+- `brand add` stores the name it observed on the site as the brand's display `name` only.
+  A display name is a bare token and bare tokens are never identity here, so it is not an
+  alias and nothing matches on it until you type it into `brand alias`.
 
 `npm run db:brands` is the backfill for surfaces already onboarded, not a create. On a
 fresh database it groups every ungrouped surface under the brand its own config names,
@@ -145,24 +176,38 @@ an asset approved before the cancellation is no longer deliverable — `publish`
 before opening a PR or writing a handoff, the `outbox` stops listing the draft, and
 `mark-sent` refuses it.
 
+## verify: did it ship
+
+`verify` has two legs and they carry very different weight.
+
+**Execution verification is the claim.** It re-collects evidence and compares the same
+check keys the claim was made from; a bet is marked exec-verified only when the change is
+observably live, and otherwise it stays `shipped` and says which check key failed with
+both values. This is concrete and fast.
+
+**Outcome assessment and the learn priors are EXPERIMENTAL.** They run, they are real, and
+they are not load-bearing: "did the change move the number" is search attribution, and it
+needs a domain you control plus weeks of settled bets before it says anything. The CLI
+labels the outcome leg experimental in its own output. Report it that way; do not present
+a prior or an outcome note as proof a fix worked.
+
 ## Closing the loop: settle
 
-**A demo domain you do not control (`example.com` in the README quickstart) walks the
-loop only as far as `publish`.** `verify` re-checks a fix spec's `check_key`s against
-live evidence, and nobody can ship a change to `example.com` — so it correctly and
-permanently reports "criteria NOT met, stays shipped", no bet reaches
-`outcome-assessed`, and `settle` is unreachable. That is `verify` refusing to claim a
+**Any domain you do not control walks the loop only as far as `publish`.** `verify`
+re-checks a fix spec's `check_key`s against live evidence, and nobody can ship a change to
+somebody else's site — so it correctly and permanently reports "criteria NOT met, stays
+shipped", no bet reaches `outcome-assessed`, and `settle` is unreachable. That is `verify` refusing to claim a
 fix worked when it was never actually shipped, not a bug. Point a surface at a domain
 you control and can ship a change to (repo `publish` can PR against, or a spec you can
 hand-deliver) to see `verify` → `settle` close for real.
 
 `verify` takes a bet as far as `outcome-assessed` — it measured what happened. Whether
 that was worth repeating is a judgment, and it is yours: `settle <bet-id>
-<keep|revise|stop>` records it and moves the bet to `settled`. This is not bookkeeping.
-The learn station's priors count ONLY settled bets with a settlement ("keep" is the win;
-"revise" and "stop" are non-wins), and those priors are a factor in every future `decide`
-score. A bet left at `outcome-assessed` teaches the engine nothing, so an unsettled
-backlog means the loop is open and ranking never improves.
+<keep|revise|stop>` records it and moves the bet to `settled`. The learn station's priors
+count ONLY settled bets with a settlement ("keep" is the win; "revise" and "stop" are
+non-wins), and those priors are a factor in every future `decide` score. Those priors are
+the experimental leg above: an unsettled backlog is how they stay empty, and an empty prior
+is a neutral multiplier, not a wrong answer.
 
 ## Outbox contract
 

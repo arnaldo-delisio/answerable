@@ -15,7 +15,7 @@ function seedRun(id: string, startedAt: number): void {
 }
 
 beforeAll(() => {
-  db.insert(schema.surfaces).values({ id: S, kind: "web-locale", configSnapshot: {}, onboardedAt: 1 }).run();
+  db.insert(schema.surfaces).values({ id: S, kind: "site", configSnapshot: {}, onboardedAt: 1 }).run();
   // Inserted out of id order on purpose; both share the same timestamp.
   seedRun("run-b", T);
   seedRun("run-a", T);

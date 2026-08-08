@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-// answerable CLI: brand | onboard | run | infer | decide | act | narrate | spec | verify | approve |
+// answerable CLI. A brand is the top-level object (`brand add <domain>` is the entry
+// point); a surface is one place the brand shows up (a site, or an assistant).
+// Verbs: brand | onboard | run | infer | decide | act | narrate | spec | verify | approve |
 // publish | preview | edit | regenerate | outbox | mark-sent | reject | implemented |
 // settle | cancel | dismiss | pause | archive | resume | tick | doctor | draft <domain>.
 // Every command takes --json for
@@ -33,6 +35,8 @@ function usage(): void {
   console.log(
     [
       "usage: answerable <command> [--json]",
+      "  brand add <domain>             START HERE: probe a domain, create the brand,",
+      "                                 propose a config for every surface it found",
       "  brand list                     brands and the identity each one matches on",
       "  brand create <id> <domain>     create a brand, identity seeded from the domain only",
       "  brand alias <id> <term>...     add aliases (the only way a bare name is ever matched)",
@@ -44,7 +48,8 @@ function usage(): void {
       "  act <surface-id>               placed bets -> generated assets (+ narration)",
       "  narrate                        plain-language narration for open claims + placed bets",
       `  spec <surface-id> <kind>       generate one fix spec (kinds: ${FIX_SPEC_KINDS.join(" | ")})`,
-      "  verify <surface-id>            run-over-run diff + execution verify",
+      "  verify <surface-id>            did it ship: re-collect and check the approved change",
+      "                                 went live (+ experimental outcome assessment)",
       "  approve <asset-id>             review gate: asset -> approved",
       "  publish <asset-id>             execute publishing policy (PR | spec-handoff)",
       "  preview <asset-id>             write a generated asset's body to stdout",
@@ -54,7 +59,7 @@ function usage(): void {
       "  mark-sent <asset-id>           record a sent outreach draft (published)",
       "  reject <asset-id> <reason>     review gate: asset -> rejected (feeds learn as negative signal)",
       "  implemented <bet-id>           spec-handoff: bet -> shipped, exec-verify queued for next verify",
-      "  settle <bet-id> <keep|revise|stop>  outcome-assessed bet -> settled (closes the learn loop)",
+      "  settle <bet-id> <keep|revise|stop>  outcome-assessed bet -> settled (feeds the experimental learn priors)",
       "  cancel <bet-id> <reason>       placed bet -> cancelled (terminal; the queue never strands a bet)",
       "  dismiss <claim-id>             mark a recommendation not relevant (claim -> dismissed)",
       "  pause <surface-id>             surface lifecycle -> paused (tick skips cadence)",
@@ -82,6 +87,38 @@ async function brandCmd(sub: string | undefined, rest: string[]): Promise<void> 
   const [id, ...terms] = rest;
   let result: import("./engine/lib/verbs").VerbResult;
   switch (sub) {
+    case "add": {
+      if (!id) return usage();
+      const { brandAdd } = await import("./engine/lib/brand-add");
+      const added = await brandAdd(id);
+      if (!added.ok) process.exitCode = 1;
+      emit(added, () => {
+        if (!added.ok) {
+          console.error(`brand add ${id}: ${added.note}`);
+          return;
+        }
+        const surfaces = added.surfaces as import("./engine/lib/brand-add").ProposedSurface[];
+        console.log(`brand add ${added.brandId}: created (${added.primaryDomain})`);
+        console.log(`  display name: ${added.name} (identity is the domain and its spoken form, never a name)`);
+        console.log(`  the site calls itself: ${added.observedName}${added.category ? ` — ${added.category}` : ""}`);
+        console.log(`  aliases: ${(added.aliases as string[]).join(", ")}`);
+        console.log(`  ${surfaces.length} surface(s) proposed (nothing is monitored until you onboard one):`);
+        for (const s of surfaces) {
+          console.log(`    ${s.kind} ${s.id} (${s.what}${s.linkage === "weak" ? ", weak link to the brand — confirm it is yours" : ""})`);
+          console.log(`      ${s.path}`);
+        }
+        for (const u of added.unreachable as { target: string; error: string }[]) {
+          console.log(`  unreachable: ${u.target} (${u.error})`);
+        }
+        for (const n of added.notes as string[]) console.log(`  note: ${n}`);
+        const first = surfaces.find((s) => s.kind === "site") ?? surfaces[0];
+        if (first) {
+          console.log(`  next: review ${first.path}, drop the .proposed from the name, then`);
+          console.log(`        answerable onboard config/surfaces/${first.id}.yaml && answerable run ${first.id}`);
+        }
+      });
+      return;
+    }
     case "list":
       result = brands.listBrands();
       break;
@@ -450,13 +487,18 @@ async function verify(surfaceId: string): Promise<void> {
       }
     }
 
-    // Outcome assessment: exec-verified bets against their windows, honest either way.
+    // Outcome assessment: EXPERIMENTAL, and labelled so in the output. Whether a shipped
+    // change went live is a fact this engine re-collects and checks. Whether it moved the
+    // number is search attribution: it needs a domain you control and weeks of settled
+    // bets before it says anything, so it is reported, never claimed.
     if (outcomes.length === 0) {
-      console.log(`  outcome: no exec-verified bets to assess`);
+      console.log(`  outcome (experimental): no exec-verified bets to assess`);
+    } else {
+      console.log(`  outcome (experimental — attribution, not proof; needs weeks of data):`);
     }
     for (const o of outcomes) {
-      console.log(`  bet ${o.betId}: ${o.mature ? "outcome-assessed" : o.note}`);
-      if (o.mature) console.log(`    ${o.note}`);
+      console.log(`    bet ${o.betId}: ${o.mature ? "outcome-assessed" : o.note}`);
+      if (o.mature) console.log(`      ${o.note}`);
     }
   });
 }

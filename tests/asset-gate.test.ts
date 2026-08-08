@@ -81,7 +81,7 @@ beforeAll(() => {
   db.insert(schema.surfaces)
     .values({
       id: WEB,
-      kind: "web-locale",
+      kind: "site",
       configSnapshot: { target: { domain: "example.com" } },
       onboardedAt: 1,
     })
@@ -89,7 +89,7 @@ beforeAll(() => {
   db.insert(schema.surfaces)
     .values({
       id: GEO,
-      kind: "ai-engine-lane",
+      kind: "assistant",
       configSnapshot: {
         observes: WEB,
         target: { engine: "chatgpt", prompt_set: { prompts: ["Is example.com legit?"] } },
