@@ -1,0 +1,31 @@
+# proposed: drafted by `answerable draft example.com`, 2026-08-08. Review every
+# proposed: field, then rename to example-com.yaml and `answerable onboard` it.
+id: example-com
+kind: web-locale
+target:
+  domain: example.com
+  path_prefix: /  # proposed: adjust when the primary locale lives under /en/
+  locale: en  # proposed: primary locale, no locale signals observed; defaulted to en
+audience: >-  # proposed: from the site's own description; replace with the real brief
+  Visitors of example.com (no meta description observed; write the audience by hand).
+business_goal: >-  # proposed: placeholder; state the real goal
+  Grow qualified search and AI-answer visibility for Example Domain.
+desired_conversion: signup  # proposed: replace with the site's real conversion
+competitors: []  # proposed: none found in comparison-page titles; fill by hand
+publishing:
+  policy: review-required
+  owner: operator  # proposed: confirm the owner
+  # repo: owner/name  # proposed: set to open real PRs on approve (directed and verified, never autonomous)
+lanes:
+  crawl:
+    enabled: true
+  community:
+    enabled: false  # proposed: enable once query sets are chosen
+# proposed: seeded discovery prompts from the site's claimed category (category not observed)
+# proposed: use these as the prompt_set of a companion ai-engine-lane surface:
+#   - "best tools for what example.com offers"
+#   - "Example Domain alternatives"
+#   - "is Example Domain worth it"
+#   - "what example.com offers: which product should I use?"
+# cadence: weekly  # proposed: uncomment to put this surface on the tick schedule
+policy: {}  # default class weights

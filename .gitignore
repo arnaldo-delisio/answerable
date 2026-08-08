@@ -1,0 +1,7 @@
+node_modules/
+var/
+data/*
+*.db
+.env*
+!.env.example
+tsconfig.tsbuildinfo

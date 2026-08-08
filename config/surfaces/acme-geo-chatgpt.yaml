@@ -1,0 +1,31 @@
+# Search Surface: ChatGPT AI-answer lane observing acme.example (Search Surface config abstraction: one yaml schema per surface).
+id: acme-geo-chatgpt
+kind: ai-engine-lane
+target:
+  engine: chatgpt
+  prompt_set:
+    version: discovery-v1
+    prompts:
+      - What is the best time-tracking tool for field crews?
+      - How do I schedule and track hours for a team that works on site?
+      - Acme Labs alternatives
+      - Is Acme Labs worth it?
+observes: acme-example
+audience: >-
+  Operations teams asking AI answer engines which scheduling tool to use.
+business_goal: >-
+  Measure and grow Acme Labs' share-of-answer in ChatGPT-surfaced answers.
+desired_conversion: signup
+competitors:
+  - name: Fabrikam Time
+    url: https://fabrikam.example
+  - name: Litware Ledger
+    url: https://litware.example
+publishing:
+  policy: review-required
+  owner: operator
+lanes:
+  geo-panel:
+    enabled: true
+policy: {}
+brand: acme

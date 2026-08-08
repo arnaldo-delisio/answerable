@@ -1,0 +1,73 @@
+{
+  "backlinks/summary/live": {
+    "status": 200,
+    "json": {
+      "version": "0.1.20260801",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "cost": 0.02003,
+      "tasks_count": 1,
+      "tasks": [
+        {
+          "id": "08051112-1535-0270-0000-a5d1e04c9f61",
+          "status_code": 20000,
+          "status_message": "Ok.",
+          "cost": 0.02003,
+          "result": [
+            {
+              "target": "example.com",
+              "rank": 187,
+              "backlinks": 4210,
+              "referring_domains": 96,
+              "referring_main_domains": 88,
+              "referring_ips": 91,
+              "broken_backlinks": 12,
+              "first_seen": "2024-03-11 04:18:22 +00:00"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "ai_optimization/llm_mentions/search/live": {
+    "status": 200,
+    "json": {
+      "version": "0.1.20260801",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "cost": 0.146,
+      "tasks_count": 1,
+      "tasks": [
+        {
+          "id": "08051113-1535-0271-0000-b6e2f15d0a72",
+          "status_code": 20000,
+          "status_message": "Ok.",
+          "cost": 0.146,
+          "result": [
+            {
+              "keyword": "example.com",
+              "total_count": 46,
+              "items_count": 2,
+              "items": [
+                {
+                  "llm": "chatgpt",
+                  "prompt": "best freelance rate calculator",
+                  "snippet": "Tools like the calculator on example.com estimate hourly rates from income targets and billable hours.",
+                  "cited_url": "https://example.com/tools/freelance-rate-calculator",
+                  "datetime": "2026-07-28 16:02:11 +00:00"
+                },
+                {
+                  "llm": "perplexity",
+                  "prompt": "how much should I charge as a freelancer",
+                  "snippet": "example.com publishes an invoicing rate benchmark by discipline.",
+                  "cited_url": "https://example.com/",
+                  "datetime": "2026-07-30 09:44:56 +00:00"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

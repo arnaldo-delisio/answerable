@@ -1,0 +1,30 @@
+# Search Surface: guides.example.com (the Search Surface config abstraction: one yaml schema per surface, no new code per surface).
+#
+# A second property of the same brand, on its own domain: it inherits priors from
+# the main locale (priors_from) instead of starting cold.
+id: example-guides-com
+kind: web-locale
+target:
+  domain: guides.example.com
+  path_prefix: /
+  locale: en
+audience: >-
+  Freelancers searching how-to questions about pricing, contracts, and getting
+  paid, one step earlier in the journey than the product pages.
+business_goal: >-
+  Establish guides.example.com as a discoverable entity for the freelancer
+  audience, starting from eligibility and technical basics.
+desired_conversion: signup
+competitors: []
+publishing:
+  policy: review-required
+  owner: operator
+lanes:
+  crawl:
+    enabled: true
+priors_from: example-com-en
+# answerable tick runs this surface when the last run is older than the cadence window
+cadence: weekly
+# Empty policy = default class weights (decomposed prioritization score: impact x confidence x class weight x prior / effort)
+policy: {}
+brand: example

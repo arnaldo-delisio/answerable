@@ -1,0 +1,58 @@
+# Search Surface: example.com English web locale (the Search Surface config abstraction: one yaml schema per surface, no new code per surface).
+#
+# Example config for a fictional operator: Example, invoicing software for
+# freelancers, on the reserved domain example.com. Copy this file, change the
+# domain, audience, goal, and competitors, and onboard it:
+#   npm run answerable -- onboard config/surfaces/<your-surface>.yaml
+id: example-com-en
+kind: web-locale
+target:
+  domain: www.example.com
+  path_prefix: /en
+  locale: en
+audience: >-
+  Freelancers and small studios who bill clients by the hour or by the project,
+  searching for how to price work, invoice it, and get paid on time.
+business_goal: >-
+  Win discovery share for Example in the invoicing answer space, in both classic
+  search and AI-engine lanes.
+desired_conversion: signup
+competitors:
+  - name: Northwind Books
+    url: https://northwind.example
+  - name: Contoso Pay
+    url: https://contoso.example
+  - name: Fabrikam Time
+    url: https://fabrikam.example
+  - name: Litware Ledger
+    url: https://litware.example
+  - name: Initech Invoices
+    url: https://initech.example
+publishing:
+  policy: review-required
+  owner: operator
+lanes:
+  crawl:
+    enabled: true
+  community:
+    enabled: true
+    # Demand clusters this surface tracks on Reddit and Hacker News. Customer
+    # specifics live here in config, never in src/.
+    demand_queries:
+      - freelance rate calculator
+      - invoicing software
+      - how to invoice a client
+  competitor:
+    enabled: true
+  x:
+    enabled: true
+# answerable tick runs this surface when the last run is older than the cadence window
+cadence: weekly
+# Empty policy = default class weights (decomposed prioritization score: impact x confidence x class weight x prior / effort)
+policy: {}
+# No `brand:` here on purpose: this is the first surface a fresh install onboards,
+# and a config may only name a brand that already exists. Onboard and run this
+# surface first, then create the brand with `answerable brand create <id> <domain>`
+# (or `npm run db:brands`, which backfills one derived from this config); after that,
+# add `brand: <id>` here and to further surfaces to group them (the other example
+# configs in this directory show that shape).

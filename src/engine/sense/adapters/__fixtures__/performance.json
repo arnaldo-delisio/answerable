@@ -1,0 +1,48 @@
+{
+  "runPagespeed?url=https%3A%2F%2Fexample.com%2F&strategy=mobile": {
+    "status": 200,
+    "json": {
+      "id": "https://example.com/",
+      "loadingExperience": {
+        "overall_category": "AVERAGE",
+        "metrics": {
+          "LARGEST_CONTENTFUL_PAINT_MS": { "percentile": 2350, "category": "AVERAGE" },
+          "INTERACTION_TO_NEXT_PAINT": { "percentile": 180, "category": "GOOD" },
+          "CUMULATIVE_LAYOUT_SHIFT_SCORE": { "percentile": 5, "category": "GOOD" }
+        }
+      },
+      "lighthouseResult": {
+        "categories": { "performance": { "score": 0.82 } },
+        "audits": {
+          "largest-contentful-paint": { "numericValue": 2412.5, "displayValue": "2.4 s" },
+          "cumulative-layout-shift": { "numericValue": 0.05, "displayValue": "0.05" },
+          "total-blocking-time": { "numericValue": 143, "displayValue": "140 ms" },
+          "first-contentful-paint": { "numericValue": 1210.3, "displayValue": "1.2 s" }
+        }
+      }
+    }
+  },
+  "runPagespeed?url=https%3A%2F%2Fexample.com%2F&strategy=desktop": {
+    "status": 200,
+    "json": {
+      "id": "https://example.com/",
+      "loadingExperience": {
+        "overall_category": "GOOD",
+        "metrics": {
+          "LARGEST_CONTENTFUL_PAINT_MS": { "percentile": 1400, "category": "GOOD" },
+          "INTERACTION_TO_NEXT_PAINT": { "percentile": 90, "category": "GOOD" },
+          "CUMULATIVE_LAYOUT_SHIFT_SCORE": { "percentile": 2, "category": "GOOD" }
+        }
+      },
+      "lighthouseResult": {
+        "categories": { "performance": { "score": 0.96 } },
+        "audits": {
+          "largest-contentful-paint": { "numericValue": 1120.1, "displayValue": "1.1 s" },
+          "cumulative-layout-shift": { "numericValue": 0.02, "displayValue": "0.02" },
+          "total-blocking-time": { "numericValue": 38, "displayValue": "40 ms" },
+          "first-contentful-paint": { "numericValue": 640.8, "displayValue": "0.6 s" }
+        }
+      }
+    }
+  }
+}

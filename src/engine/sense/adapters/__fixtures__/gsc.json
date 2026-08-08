@@ -1,0 +1,41 @@
+{
+  "oauth2.googleapis.com/token": {
+    "status": 200,
+    "json": { "access_token": "fixture-access-token", "expires_in": 3599, "token_type": "Bearer" }
+  },
+  "searchAnalytics/query": {
+    "status": 200,
+    "json": {
+      "rows": [{ "clicks": 412, "impressions": 18750, "ctr": 0.02197, "position": 14.3 }],
+      "responseAggregationType": "auto"
+    }
+  },
+  "searchAnalytics/query|\"dimensions\"": {
+    "status": 200,
+    "json": {
+      "rows": [
+        { "keys": ["freelance rate calculator"], "clicks": 210, "impressions": 5200, "ctr": 0.0404, "position": 4.1 },
+        { "keys": ["example.com"], "clicks": 130, "impressions": 900, "ctr": 0.1444, "position": 1.2 },
+        { "keys": ["freelance hourly rate"], "clicks": 72, "impressions": 12650, "ctr": 0.0057, "position": 22.8 }
+      ],
+      "responseAggregationType": "byProperty"
+    }
+  },
+  "urlInspection/index:inspect": {
+    "status": 200,
+    "json": {
+      "inspectionResult": {
+        "inspectionResultLink": "https://search.google.com/search-console/inspect?resource_id=sc-domain:example.com",
+        "indexStatusResult": {
+          "verdict": "PASS",
+          "coverageState": "Submitted and indexed",
+          "robotsTxtState": "ALLOWED",
+          "indexingState": "INDEXING_ALLOWED",
+          "lastCrawlTime": "2026-08-01T09:12:44Z",
+          "pageFetchState": "SUCCESSFUL",
+          "googleCanonical": "https://example.com/"
+        }
+      }
+    }
+  }
+}

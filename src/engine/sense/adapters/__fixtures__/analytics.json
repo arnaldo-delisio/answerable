@@ -1,0 +1,24 @@
+{
+  "oauth2.googleapis.com/token": {
+    "status": 200,
+    "json": { "access_token": "fixture-access-token", "expires_in": 3599, "token_type": "Bearer" }
+  },
+  ":runReport": {
+    "status": 200,
+    "json": {
+      "dimensionHeaders": [{ "name": "pagePath" }],
+      "metricHeaders": [
+        { "name": "sessions", "type": "TYPE_INTEGER" },
+        { "name": "keyEvents", "type": "TYPE_FLOAT" }
+      ],
+      "rows": [
+        { "dimensionValues": [{ "value": "/" }], "metricValues": [{ "value": "3120" }, { "value": "44" }] },
+        { "dimensionValues": [{ "value": "/tools/freelance-rate-calculator" }], "metricValues": [{ "value": "1870" }, { "value": "96" }] },
+        { "dimensionValues": [{ "value": "/pricing" }], "metricValues": [{ "value": "640" }, { "value": "12" }] }
+      ],
+      "rowCount": 3,
+      "metadata": { "currencyCode": "USD", "timeZone": "Europe/Rome" },
+      "kind": "analyticsData#runReport"
+    }
+  }
+}

@@ -1,0 +1,47 @@
+# Search Surface: Claude AI-answer lane observing example.com (Search Surface config abstraction: one yaml schema per surface).
+# Prompt set: the discovery and reputation questions a buyer actually asks an
+# answer engine before choosing a tool.
+id: example-geo-claude
+kind: ai-engine-lane
+target:
+  engine: claude
+  prompt_set:
+    version: discovery-v1
+    prompts:
+      - What is the best invoicing tool for freelancers right now?
+      - What should I use to send invoices and track payments as a solo designer?
+      - Best invoicing software for a small studio billing hourly?
+      - Northwind Books vs Contoso Pay, which is better for freelance invoicing?
+      - How do freelancers decide what to charge per hour?
+      - Is example.com legit?
+      - example.com reviews, what do people say?
+      - What is Example?
+observes: example-com-en
+audience: >-
+  Freelancers and small studios asking AI answer engines discovery and reputation
+  questions about invoicing tools.
+business_goal: >-
+  Measure and grow Example's share-of-answer in Claude-surfaced answers.
+desired_conversion: signup
+competitors:
+  - name: Northwind Books
+    url: https://northwind.example
+  - name: Contoso Pay
+    url: https://contoso.example
+  - name: Fabrikam Time
+    url: https://fabrikam.example
+  - name: Litware Ledger
+    url: https://litware.example
+  - name: Initech Invoices
+    url: https://initech.example
+publishing:
+  policy: review-required
+  owner: operator
+lanes:
+  geo-panel:
+    enabled: true
+policy: {}
+# No `brand:` here on purpose: a config may only name a brand that already exists
+# (see example-com-en.yaml). Create one with `answerable brand create <id> <domain>`
+# (or `npm run db:brands` to backfill from surfaces you already onboarded), then add
+# `brand: <id>` here once it exists.

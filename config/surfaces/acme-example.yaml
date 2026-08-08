@@ -1,0 +1,28 @@
+# Search Surface: acme.example web-locale — a SECOND brand, so brand scoping in the
+# queues and rollups has two brands' data to separate (scripts/fixture-second-brand.ts).
+id: acme-example
+kind: web-locale
+target:
+  domain: acme.example
+  path_prefix: /
+  locale: en
+audience: >-
+  Operations teams comparing time-tracking and scheduling tools for field crews.
+business_goal: >-
+  Grow qualified search and AI-answer visibility for Acme Labs.
+desired_conversion: signup
+competitors:
+  - name: Fabrikam Time
+    url: https://fabrikam.example
+  - name: Litware Ledger
+    url: https://litware.example
+publishing:
+  policy: review-required
+  owner: operator
+lanes:
+  crawl:
+    enabled: true
+  community:
+    enabled: false
+policy: {}
+brand: acme

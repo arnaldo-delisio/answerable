@@ -1,0 +1,37 @@
+{
+  "GetUrlSubmissionQuota": {
+    "status": 200,
+    "json": {
+      "d": {
+        "__type": "UrlSubmissionQuota:#Microsoft.Bing.Webmaster.Api",
+        "DailyQuota": 100,
+        "MonthlyQuota": 3000
+      }
+    }
+  },
+  "GetRankAndTrafficStats": {
+    "status": 200,
+    "json": {
+      "d": [
+        {
+          "__type": "RankAndTrafficStats:#Microsoft.Bing.Webmaster.Api",
+          "Date": "/Date(1750000000000)/",
+          "Impressions": 900,
+          "Clicks": 40
+        },
+        {
+          "__type": "RankAndTrafficStats:#Microsoft.Bing.Webmaster.Api",
+          "Date": "/Date(1785000000000)/",
+          "Impressions": 1240,
+          "Clicks": 55
+        },
+        {
+          "__type": "RankAndTrafficStats:#Microsoft.Bing.Webmaster.Api",
+          "Date": "/Date(1785500000000)/",
+          "Impressions": 1310,
+          "Clicks": 61
+        }
+      ]
+    }
+  }
+}

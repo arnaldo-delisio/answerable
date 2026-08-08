@@ -1,0 +1,44 @@
+{
+  "name": "answerable",
+  "version": "0.1.0",
+  "description": "An engine and CLI, driven by a coding agent, that finds what is stopping people from finding and choosing you in Google and in AI answers, generates the fix, and verifies separately whether it shipped and whether it worked.",
+  "license": "MIT",
+  "author": "Arnaldo De Lisio",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/arnaldo-delisio/answerable"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "lint": "eslint",
+    "answerable": "tsx src/cli.ts",
+    "db:push": "drizzle-kit push",
+    "db:generate": "drizzle-kit generate",
+    "db:brands": "tsx scripts/migrate-brands.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.2",
+    "drizzle-orm": "^0.45.2",
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^20",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "^9",
+    "tsx": "^4.23.5",
+    "typescript": "^5",
+    "typescript-eslint": "^8.46.0",
+    "vitest": "^4.1.10"
+  },
+  "allowScripts": {
+    "better-sqlite3@13.0.2": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.1": true,
+    "esbuild@0.18.20": true,
+    "unrs-resolver@1.12.2": true
+  }
+}

@@ -1,0 +1,310 @@
+// Draft onboarding (answerable draft <domain>): probe a live site with the crawl station's own
+// polite fetch helpers and propose a surface config. Everything in the output is either
+// observed on the site (locales from hreflang/paths, brand + description from
+// title/JSON-LD/meta, competitors from comparison-page titles) or derived from the
+// site's own claimed category (seeded discovery prompts). The result is a
+// config/surfaces/<slug>.proposed.yaml full of `# proposed:` comments; a human promotes
+// it. Probe failures degrade to smaller proposals, never a throw.
+
+import { mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { safeFetch } from "./safe-fetch";
+import { assertSurfaceId } from "./surface";
+import {
+  extractLinkTags,
+  extractAttr,
+  extractJsonLdTypes,
+  stripToText,
+  type FetchOutcome,
+} from "../sense/adapters/crawl";
+
+const CRAWL_PAGE_LIMIT = 12; // small crawl over sitemap URLs for comparison titles
+const COMPARISON_RE = /\balternatives?\b|\bvs\.?\b|\bversus\b|\bcompare\b|\bcomparison\b/i;
+
+export interface DraftProbe {
+  domain: string;
+  slug: string;
+  brand: string;
+  description: string | null;
+  category: string | null;
+  locales: string[]; // primary first
+  localeSource: "hreflang" | "paths" | "none";
+  competitors: { name: string; url: string }[];
+  prompts: string[];
+  pagesCrawled: number;
+  notes: string[];
+  yamlPath: string;
+  yaml: string;
+}
+
+// Basic named/numeric entity decode: probe strings feed yaml text, not HTML.
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&(?:apos|#39);/g, "'");
+}
+
+export function titleOf(html: string): string | null {
+  const m = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html);
+  return m ? decodeEntities(stripToText(m[1])) : null;
+}
+
+export function metaDescription(html: string): string | null {
+  for (const tag of html.match(/<meta\b[^>]*>/gi) ?? []) {
+    const name = extractAttr(tag, "name")?.toLowerCase();
+    if (name === "description" || extractAttr(tag, "property")?.toLowerCase() === "og:description") {
+      const content = extractAttr(tag, "content");
+      if (content) return decodeEntities(content);
+    }
+  }
+  return null;
+}
+
+// JSON-LD Organization/WebSite name + description, when the site declares one.
+export function jsonLdIdentity(html: string): { name: string | null; description: string | null } {
+  const re = /<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    try {
+      const parsed = JSON.parse(m[1]);
+      const nodes = Array.isArray(parsed) ? parsed : (parsed["@graph"] ?? [parsed]);
+      for (const node of Array.isArray(nodes) ? nodes : [nodes]) {
+        const t = node?.["@type"];
+        const types = Array.isArray(t) ? t : [t];
+        if (types.some((x) => x === "Organization" || x === "WebSite" || x === "SoftwareApplication")) {
+          return {
+            name: typeof node.name === "string" ? node.name : null,
+            description: typeof node.description === "string" ? node.description : null,
+          };
+        }
+      }
+    } catch {
+      // unparseable block: identity comes from title/meta instead
+    }
+  }
+  return { name: null, description: null };
+}
+
+export function localesFromHreflang(html: string): string[] {
+  const out: string[] = [];
+  for (const tag of extractLinkTags(html, "alternate")) {
+    const h = extractAttr(tag, "hreflang");
+    if (h && h !== "x-default" && !out.includes(h)) out.push(h);
+  }
+  return out;
+}
+
+// Locale-shaped first path segments over the sitemap URLs (e.g. /fr/, /pt-br/).
+export function localesFromPaths(urls: string[]): string[] {
+  const counts = new Map<string, number>();
+  for (const u of urls) {
+    try {
+      const seg = new URL(u).pathname.split("/").filter(Boolean)[0];
+      if (seg && /^[a-z]{2}(-[a-z]{2})?$/i.test(seg)) counts.set(seg.toLowerCase(), (counts.get(seg.toLowerCase()) ?? 0) + 1);
+    } catch {
+      // unparseable URL: skip
+    }
+  }
+  // A locale prefix appearing once is likely a page slug ("go", "us"); require 2+.
+  return [...counts.entries()].filter(([, n]) => n >= 2).map(([l]) => l);
+}
+
+// The site's own claimed category: the phrase after the brand/separator in its title,
+// or the leading noun phrase of its description.
+export function claimedCategory(title: string | null, description: string | null, brand: string): string | null {
+  if (title) {
+    const brandLower = brand.toLowerCase();
+    const afterSep = title.split(/\s*[|:•·]\s+|\s+[-–—]\s+/).map((s) => s.trim()).filter(Boolean);
+    const usable = afterSep.filter((s) => s.toLowerCase() !== brandLower && s.length > 8);
+    // A segment that merely restates the brand name ("Example Software" for brand "Example")
+    // names the brand, not the category it competes in; prefer a segment that
+    // carries neither, and settle for a name-carrying one only if that is all
+    // the title offers.
+    const candidate = usable.find((s) => !s.toLowerCase().includes(brandLower)) ?? usable[0];
+    if (candidate) return candidate;
+  }
+  if (description) {
+    const first = description.split(/[.!]/)[0].trim();
+    if (first.length > 0) return first.length > 90 ? `${first.slice(0, 90)}…` : first;
+  }
+  return null;
+}
+
+// Competitor names out of a comparison-page title: "X vs Y", "N best X alternatives".
+function competitorsFromTitle(title: string, brand: string): string[] {
+  const out: string[] = [];
+  const brandLower = brand.toLowerCase();
+  const vsParts = title.split(/\bvs\.?\b|\bversus\b/i);
+  if (vsParts.length > 1) {
+    for (const part of vsParts) {
+      const name = part
+        .replace(/^\s*\d+\s*/, "")
+        .replace(/[|:•·].*$/, "")
+        .replace(/\(\s*\d{4}\s*\)/g, "")
+        .replace(/\b(best|top|alternatives?|comparison|compare|review|in \d{4})\b/gi, "")
+        .trim()
+        .replace(/[,.]+$/, "");
+      if (name && name.toLowerCase() !== brandLower && name.length < 40) out.push(name);
+    }
+  }
+  const altMatch = /(?:to|for)\s+([A-Z][\w.-]+(?:\s+[A-Z][\w.-]+)?)\s*(?:alternatives?|$)/.exec(title) ??
+    /^([\w.-]+)\s+alternatives?\b/i.exec(title.trim());
+  if (altMatch && altMatch[1].toLowerCase() !== brandLower) out.push(altMatch[1].trim());
+  return out;
+}
+
+function yamlQuote(s: string): string {
+  return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function renderProposedYaml(p: Omit<DraftProbe, "yaml" | "yamlPath">): string {
+  const primary = p.locales[0] ?? "en";
+  const nonPrimary = p.locales.slice(1);
+  const lines: string[] = [
+    `# proposed: drafted by \`answerable draft ${p.domain}\`, ${new Date().toISOString().slice(0, 10)}. Review every`,
+    `# proposed: field, then rename to ${p.slug}.yaml and \`answerable onboard\` it.`,
+    `id: ${p.slug}`,
+    `kind: web-locale`,
+    `target:`,
+    `  domain: ${p.domain}`,
+    `  path_prefix: /  # proposed: adjust when the primary locale lives under /${primary}/`,
+    `  locale: ${primary}  # proposed: primary locale, ${p.localeSource === "none" ? "no locale signals observed; defaulted to en" : `observed via ${p.localeSource}`}`,
+  ];
+  if (nonPrimary.length > 0) {
+    lines.push(`  # proposed: non-primary locales observed on the site; each becomes its own`);
+    lines.push(`  # proposed: web-locale surface file when you want it tracked:`);
+    for (const l of nonPrimary) lines.push(`  # locale: ${l}`);
+  }
+  lines.push(
+    `audience: >-  # proposed: from the site's own description; replace with the real brief`,
+    `  ${p.description ?? `Visitors of ${p.domain} (no meta description observed; write the audience by hand).`}`,
+    `business_goal: >-  # proposed: placeholder; state the real goal`,
+    `  Grow qualified search and AI-answer visibility for ${p.brand}.`,
+    `desired_conversion: signup  # proposed: replace with the site's real conversion`,
+    `competitors:${p.competitors.length === 0 ? " []  # proposed: none found in comparison-page titles; fill by hand" : ""}`,
+  );
+  if (p.competitors.length > 0) {
+    lines.push(`  # proposed: from comparison-page titles found on ${p.domain}; verify each`);
+    for (const c of p.competitors) {
+      lines.push(`  - name: ${yamlQuote(c.name)}`);
+      lines.push(`    url: ${yamlQuote(c.url)}`);
+    }
+  }
+  lines.push(
+    `publishing:`,
+    `  policy: review-required`,
+    `  owner: operator  # proposed: confirm the owner`,
+    `  # repo: owner/name  # proposed: set to open real PRs on approve (directed and verified, never autonomous)`,
+    `lanes:`,
+    `  crawl:`,
+    `    enabled: true`,
+    `  community:`,
+    `    enabled: false  # proposed: enable once query sets are chosen`,
+    `# proposed: seeded discovery prompts from the site's claimed category` +
+      (p.category ? ` ("${p.category.replace(/"/g, "'")}")` : " (category not observed)"),
+    `# proposed: use these as the prompt_set of a companion ai-engine-lane surface:`,
+  );
+  for (const prompt of p.prompts) lines.push(`#   - ${yamlQuote(prompt)}`);
+  lines.push(
+    `# cadence: weekly  # proposed: uncomment to put this surface on the tick schedule`,
+    `policy: {}  # default class weights`,
+  );
+  return lines.join("\n") + "\n";
+}
+
+export async function draft(domain: string, projectRoot = process.cwd()): Promise<DraftProbe> {
+  const notes: string[] = [];
+  const cleanDomain = domain.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const origin = `https://${cleanDomain}`;
+  const slug = cleanDomain.replace(/^www\./, "").replace(/[^a-z0-9]+/gi, "-").toLowerCase().replace(/^-+|-+$/g, "").slice(0, 64);
+  assertSurfaceId(slug, `draft ${domain}`); // slug becomes a file name and surface id
+
+  const home: FetchOutcome = await safeFetch(`${origin}/`);
+  const html = home.ok && home.body ? home.body : "";
+  if (!html) notes.push(`homepage fetch failed (${home.error ?? `http ${home.status}`}); proposal degrades to defaults`);
+
+  const title = titleOf(html);
+  const jsonLd = jsonLdIdentity(html);
+  const brand = jsonLd.name ?? title?.split(/\s*[|:•·]\s+|\s+[-–—]\s+/)[0]?.trim() ?? cleanDomain.replace(/^www\./, "").split(".")[0];
+  const description = metaDescription(html) ?? jsonLd.description;
+  if (extractJsonLdTypes(html).length === 0) notes.push("no JSON-LD on the homepage; brand taken from the title tag");
+
+  // Locales: hreflang first, sitemap path prefixes second.
+  let locales = localesFromHreflang(html);
+  let localeSource: DraftProbe["localeSource"] = locales.length > 0 ? "hreflang" : "none";
+
+  // Sitemap for locale paths + the small comparison crawl.
+  let sitemapUrls: string[] = [];
+  const robots = await safeFetch(`${origin}/robots.txt`);
+  const sitemapPointer = robots.ok && robots.body ? /^sitemap:\s*(\S+)/im.exec(robots.body)?.[1] : undefined;
+  const sitemapRes = await safeFetch(sitemapPointer ?? `${origin}/sitemap.xml`);
+  if (sitemapRes.ok && sitemapRes.body) {
+    sitemapUrls = [...sitemapRes.body.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)].map((m) => m[1]);
+    // Sitemap index: follow the first child sitemap for real page URLs.
+    if (/<sitemapindex/i.test(sitemapRes.body) && sitemapUrls.length > 0) {
+      const child = await safeFetch(sitemapUrls[0]);
+      if (child.ok && child.body) {
+        sitemapUrls = [...child.body.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)].map((m) => m[1]);
+      }
+    }
+  } else {
+    notes.push(`sitemap not readable (${sitemapRes.error ?? `http ${sitemapRes.status}`}); locale paths and comparison crawl limited`);
+  }
+  if (locales.length === 0 && sitemapUrls.length > 0) {
+    locales = localesFromPaths(sitemapUrls);
+    if (locales.length > 0) localeSource = "paths";
+  }
+
+  // Small crawl: comparison-shaped URLs first, then a general sample, for competitor names.
+  const comparisonUrls = sitemapUrls.filter((u) => COMPARISON_RE.test(u));
+  const crawlSet = [...comparisonUrls, ...sitemapUrls.filter((u) => !comparisonUrls.includes(u))].slice(0, CRAWL_PAGE_LIMIT);
+  const competitorNames = new Map<string, string>(); // name -> first url seen on
+  let pagesCrawled = 0;
+  for (const url of crawlSet) {
+    const page = await safeFetch(url);
+    pagesCrawled += 1;
+    if (!page.ok || !page.body) continue;
+    const pageTitle = titleOf(page.body);
+    if (!pageTitle || !COMPARISON_RE.test(pageTitle)) continue;
+    for (const name of competitorsFromTitle(pageTitle, brand)) {
+      if (!competitorNames.has(name)) competitorNames.set(name, url);
+    }
+  }
+  if (competitorNames.size === 0 && pagesCrawled > 0) {
+    notes.push(`no competitor names found in comparison-page titles over ${pagesCrawled} crawled page(s)`);
+  }
+
+  const category = claimedCategory(title, description, brand);
+  const categoryPhrase = category ?? `what ${cleanDomain.replace(/^www\./, "")} offers`;
+  const prompts = [
+    `best tools for ${categoryPhrase.toLowerCase()}`,
+    `${brand} alternatives`,
+    `is ${brand} worth it`,
+    `${categoryPhrase.toLowerCase()}: which product should I use?`,
+  ];
+
+  const probe: Omit<DraftProbe, "yaml" | "yamlPath"> = {
+    domain: cleanDomain,
+    slug,
+    brand,
+    description,
+    category,
+    locales,
+    localeSource,
+    competitors: [...competitorNames.entries()].map(([name, url]) => ({ name, url })),
+    prompts,
+    pagesCrawled,
+    notes,
+  };
+  const yaml = renderProposedYaml(probe);
+  const outDir = path.join(projectRoot, "config", "surfaces");
+  mkdirSync(outDir, { recursive: true });
+  const yamlPath = path.join(outDir, `${slug}.proposed.yaml`);
+  writeFileSync(yamlPath, yaml);
+  return { ...probe, yaml, yamlPath };
+}
