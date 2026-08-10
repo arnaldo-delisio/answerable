@@ -33,10 +33,14 @@ the site or assistant detectors fire, and nothing says so.
 
 `brand add <domain>` is the entry point. It probes the domain, **creates exactly one row —
 the brand** — and writes a `config/surfaces/<id>.proposed.yaml` per discovered surface.
-It proposes `site` and `assistant` surfaces only: a community surface is worth having only
-where a brand has a real presence on a specific platform, and the probe has no evidence of
-that, so inventing a Reddit surface for every brand would be coverage theatre. Write one by
-hand from the example. Each proposed site config lists, as commented-out entries, the competitor
+It proposes `site` and `assistant` surfaces always, and a `community` surface only where
+one can actually be collected: a Reddit or Hacker News surface only where a keyless mention
+check found the brand really is discussed there (checked-and-none-found is reported as the
+finding it is), and an `x` surface only where the site links an X profile AND this box can
+run the x lane (`xurl` on PATH, or `X_BEARER_TOKEN`) — without a credential the profile is
+reported with what would enable it, since a proposal that can only write key-pending rows
+is coverage theatre. Store listings, GitHub, LinkedIn and the rest have no collector, so
+they are reported found-and-unmonitored and never proposed. Each proposed site config lists, as commented-out entries, the competitor
 names the probe read off the brand's own comparison-page titles (the same crawl
 `draft <domain>` runs). `competitors:` itself ships empty and valid: the probe knows the
 name but not the competitor's own URL, and that URL is FETCHED by the competitor lane, so

@@ -50,6 +50,16 @@ function xurlOnPath(): boolean {
   return which.status === 0;
 }
 
+// The credential ladder as a question anyone can ask BEFORE running the lane, which is
+// what `brand add` needs: it proposes an x community surface only where this box can
+// actually collect one, so a proposal is never a config that can do nothing but write
+// key-pending rows. Returns the rung that would serve, or null when neither exists.
+// Never returns the token itself — a credential value has no business leaving this file.
+export function xLaneCredential(): "X_BEARER_TOKEN" | "xurl" | null {
+  if (process.env[ENV_VAR]) return ENV_VAR;
+  return xurlOnPath() ? "xurl" : null;
+}
+
 async function viaXurl(query: string): Promise<XOutcome> {
   await sleep(GAP_MS);
   const fetchedAt = Date.now();
@@ -122,8 +132,7 @@ export async function collect(
   }
 
   const token = process.env[ENV_VAR];
-  const haveXurl = !token && xurlOnPath();
-  if (!token && !haveXurl) {
+  if (xLaneCredential() === null) {
     // Honest lane status: no credential lane available on this box.
     row(
       `x/lane-status@v1/credentials`,

@@ -277,3 +277,81 @@ describe("the collector marks the rows the metric layer reads", () => {
     }
   }, 120_000);
 });
+
+// The same defect one layer earlier, and worse there: a 200 carrying something that is
+// not a search listing (a proxy page, an error payload, a changed API) extracted
+// permissively to `hit_count: 0` and was STORED as a pass row. A note that says the wrong
+// thing is a bad note; a measurement nobody made, written into evidence as a zero, is a
+// number the whole product then reasons from. The lane already knows how to say "this
+// query did not answer" — it writes a fail row — and a malformed 200 is that case.
+describe("a 200 that is not a listing is a fail row, never a measured zero", () => {
+  const surface = parseSurface(surfaceYaml);
+
+  async function collectWith(body: unknown) {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })) as typeof fetch;
+    try {
+      return await collectCommunity(surface, "run-malformed", null);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  }
+
+  it("fails the row and says why, rather than recording nobody's zero", async () => {
+    const { evidence } = await collectWith({ status: "error", message: "temporarily unavailable" });
+
+    expect(evidence.length).toBeGreaterThan(0);
+    for (const r of evidence) {
+      expect(r.status).toBe("fail");
+      const v = r.value as Record<string, unknown>;
+      expect(v).not.toHaveProperty("hit_count"); // the number nobody measured is absent, not zero
+      expect(String(v.error)).toMatch(/^responded 200 with a body that is not (a reddit search listing|an algolia result set)$/);
+    }
+  }, 120_000);
+
+  it("fails a self-contradicting envelope: a zero total handed back beside results", async () => {
+    // Shape-valid on both platforms and still not an answer — neither can report zero
+    // matches while returning matches. Believing the count would store an unmeasured zero.
+    const { evidence } = await collectWith({
+      data: { dist: 0, children: [{ data: { title: "acme is fine" } }] },
+      nbHits: 0,
+      hits: [{ title: "acme is fine" }],
+    });
+
+    expect(evidence.length).toBeGreaterThan(0);
+    for (const r of evidence) {
+      expect(r.status).toBe("fail");
+      expect(r.value).not.toHaveProperty("hit_count");
+    }
+  }, 120_000);
+
+  it("still records a large total beside a short page as the measurement it is", async () => {
+    // Guards the fix against over-reach: paging means the count and the page length
+    // legitimately disagree, and that must never be read as a malformed envelope.
+    const { evidence } = await collectWith({
+      data: { dist: 250, children: [{ data: { title: "acme thread" } }] },
+      nbHits: 1106,
+      hits: [{ title: "Show HN: acme" }],
+    });
+
+    expect(evidence.length).toBeGreaterThan(0);
+    for (const r of evidence) {
+      expect(r.status).toBe("pass");
+      expect((r.value as Record<string, unknown>).hit_count).toBeGreaterThan(0);
+    }
+  }, 120_000);
+
+  it("still records a well-formed empty result as the genuine zero it is", async () => {
+    const { evidence } = await collectWith({ data: { dist: 0, children: [] }, nbHits: 0, hits: [] });
+
+    expect(evidence.length).toBeGreaterThan(0);
+    for (const r of evidence) {
+      expect(r.status).toBe("pass");
+      expect((r.value as Record<string, unknown>).hit_count).toBe(0);
+    }
+  }, 120_000);
+});

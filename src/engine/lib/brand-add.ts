@@ -1,8 +1,13 @@
 // `answerable brand add <domain>`: the entry point. A brand is the thing being made
 // visible and it is the top-level object, so the first command an operator runs names a
 // brand, not a config file. This probes the domain (draftBrand: the brand's own site, the
-// sibling properties it links to, its store and social presence, and the two AI-answer
-// lanes) and turns that proposal into something the operator can act on.
+// sibling properties it links to, its store and social presence, the two AI-answer lanes,
+// and whether the brand is actually spoken about on the keyless community platforms) and
+// turns that proposal into something the operator can act on.
+//
+// Discovery is maximal; activation is selective. The probe reports everything it finds,
+// and a surface is proposed only where a lane can collect from it today — see the
+// communities section below, which is where those two come apart.
 //
 // WHAT IT WRITES, AND WHY EXACTLY THIS MUCH:
 //
@@ -30,12 +35,13 @@ import { renderCompetitors, yamlQuote } from "./draft";
 import { brandIdForDomain, brandHost, composeChildId } from "./brand-id";
 import { brandExists, createBrand } from "./brands";
 import { SURFACE_ID_RE } from "./surface";
+import { xLaneCredential } from "../sense/adapters/x";
 import type { VerbResult } from "./verbs";
 
 export interface ProposedSurface {
   id: string;
-  kind: "site" | "assistant";
-  what: string; // the host, or the assistant's engine
+  kind: "site" | "assistant" | "community";
+  what: string; // the host, the assistant's engine, or the community platform
   path: string; // the .proposed.yaml written for it
   linkage: "strong" | "weak" | "seed"; // how the probe tied it to the brand
 }
@@ -185,6 +191,152 @@ function renderAssistantYaml(
   return lines.join("\n") + "\n";
 }
 
+// ---- communities ---------------------------------------------------------
+//
+// The third surface kind, and the one place discovery and activation come apart.
+// Discovery is maximal: the probe reads every profile the site links to, and asks Reddit
+// and Hacker News whether the brand is actually spoken about. Activation is selective: a
+// community surface is proposed ONLY where something can be collected from it today.
+//
+//   - reddit / hacker-news: proposed only where the keyless mention probe found real
+//     mentions. A Reddit surface for every brand would be coverage theatre, and "checked,
+//     none found" is a finding worth reporting rather than a config worth writing.
+//   - x: proposed only where the site links an X profile AND this box can run the x lane
+//     (xurl on PATH, or X_BEARER_TOKEN). Without a credential the lane can only write
+//     key-pending rows, so the profile is reported with what would enable it instead.
+//     Every file in config/surfaces reads as "something I can turn on"; a file that
+//     collects nothing when onboarded, distinguishable only by a comment inside it, is
+//     the weaker signal. The invariant stays crisp: everything proposed can collect.
+//
+// Anything with no collector at all (store listings, GitHub, LinkedIn, Instagram,
+// YouTube) is reported found-and-unmonitored by notMonitoredFacets below and never
+// proposed.
+
+const X_NETWORK = "X"; // SOCIAL_HOSTS maps both x.com and twitter.com to this label
+
+export interface PlannedCommunity {
+  platform: "reddit" | "hacker-news" | "x";
+  what: string; // what the CLI prints beside the surface
+  why: string; // the evidence line written into the proposal's header
+  extraComments: string[]; // platform-specific guidance under target:
+}
+
+// Pure: everything it decides comes from the proposal plus the box's x credential rung,
+// so the whole gate is testable without a network.
+export function planCommunitySurfaces(
+  p: BrandProposal,
+  xCredential: string | null,
+): { propose: PlannedCommunity[]; notes: string[] } {
+  const propose: PlannedCommunity[] = [];
+  const notes: string[] = [];
+
+  const checked = p.community_mentions;
+  if (checked.length > 0) {
+    const parts = checked.map((c) => {
+      if (!c.checked) return `${c.platform}: could not check (${c.reason}), so nothing was proposed`;
+      if (c.hitCount === 0) return `${c.platform}: checked, none found, so nothing was proposed`;
+      propose.push({
+        platform: c.platform,
+        what: c.platform,
+        why: `a community surface: a ${c.platform} search for "${c.query}" returned ${c.hitCount} result${c.hitCount === 1 ? "" : "s"}`,
+        extraComments: [
+          `  # proposed: the queries are derived at collect time from the brand's identity`,
+          `  #   (domain + aliases) and the competitors below; add lanes.community.demand_queries`,
+          `  #   for the topic clusters this surface should also track.`,
+        ],
+      });
+      return `${c.platform}: ${c.hitCount} result${c.hitCount === 1 ? "" : "s"}, so a community surface was proposed`;
+    });
+    notes.push(`community mention check on "${checked[0].query}" — ${parts.join("; ")}`);
+  }
+
+  const xProfile = p.facets.social_profiles.find((s) => s.network === X_NETWORK);
+  if (xProfile) {
+    const handle = xProfile.url.replace(/\/+$/, "").split("/").pop() ?? "";
+    if (xCredential === null) {
+      notes.push(
+        `found an X profile (${xProfile.url}); the x lane collects it, but this box has neither the \`xurl\` CLI on PATH nor X_BEARER_TOKEN set, so no x surface was proposed — install one, then copy config/surfaces/example-community-hn.yaml with \`platform: x\``,
+      );
+    } else {
+      propose.push({
+        platform: "x",
+        what: `x${handle ? ` (@${handle})` : ""}`,
+        why: `a community surface: the site links an X profile (${xProfile.url})`,
+        extraComments: [
+          `  # proposed: the x lane runs on ${xCredential} on this box; with neither that nor`,
+          `  #   X_BEARER_TOKEN it reports key-pending and collects nothing.`,
+          `  # proposed: the lane matches the brand's identity (domain + aliases), not the handle.`,
+          `  #   To count posts that say "@${handle}" and never the domain, add it yourself:`,
+          `  #   \`answerable brand alias ${brandIdForDomain(p.brand.primaryDomain)} ${handle}\``,
+        ],
+      });
+    }
+  }
+  return { propose, notes };
+}
+
+// Found, real, and collected by nothing: store listings, and every social network with no
+// adapter behind it. X is never in this list — it has a lane, so it is accounted for by
+// planCommunitySurfaces above (a proposed surface, or a note naming what would enable
+// one), and reporting it twice under two different explanations would be worse than
+// either alone.
+export function notMonitoredFacets(p: BrandProposal): { items: { what: string; url: string }[]; note: string | null } {
+  const items = [
+    ...p.facets.store_listings.map((s) => ({ what: s.store, url: s.url })),
+    ...p.facets.social_profiles.filter((s) => s.network !== X_NETWORK).map((s) => ({ what: s.network, url: s.url })),
+  ];
+  if (items.length === 0) return { items, note: null };
+  return {
+    items,
+    note: `found ${items.length} store/social ${items.length === 1 ? "profile" : "profiles"} no collector reads yet (${items
+      .map((n) => n.what)
+      .join(", ")}); nothing was proposed for them — each becomes a surface when an adapter can collect it`,
+  };
+}
+
+export function renderCommunityYaml(
+  p: BrandProposal,
+  planned: PlannedCommunity,
+  id: string,
+  brandId: string,
+  observes: string,
+  domain: string,
+): string {
+  const lane = planned.platform === "x" ? "x" : "community";
+  const lines = [
+    ...header(domain, planned.why),
+    `id: ${id}`,
+    `kind: community`,
+    `brand: ${brandId}`,
+    `target:`,
+    `  platform: ${planned.platform}`,
+    `  query_set: brand-mentions  # a name for the set; the queries themselves are derived at collect time`,
+    ...planned.extraComments,
+    `observes: ${observes}  # the site surface these mentions are measured against`,
+    `audience: >-  # proposed: who is talking; replace with the real brief`,
+    `  People on ${planned.platform} discussing ${oneLine(p.brand.name)} and the alternatives to it.`,
+    `business_goal: >-  # proposed: placeholder; state the real goal`,
+    `  Hear what the ${planned.platform} conversation says about ${oneLine(p.brand.name)} before it reaches a buyer.`,
+    `desired_conversion: signup  # proposed: replace with the real conversion`,
+    ...competitorLines(p.competitors, "the names you are argued about beside"),
+    `publishing:`,
+    `  policy: review-required`,
+    `  owner: operator  # proposed: confirm the owner`,
+    `lanes:`,
+    `  ${lane}:`,
+    `    enabled: true`,
+    ...(lane === "community"
+      ? [
+          `    # demand_queries:  # proposed: topic clusters to track beside the brand itself`,
+          `    #   - <what your buyers ask about, in their words>`,
+        ]
+      : []),
+    `# cadence: weekly  # proposed: uncomment to put this surface on the tick schedule`,
+    `policy: {}  # default class weights`,
+  ];
+  return lines.join("\n") + "\n";
+}
+
 export async function brandAdd(domain: string, projectRoot = process.cwd()): Promise<VerbResult> {
   const host = brandHost(domain);
   if (!host) {
@@ -266,6 +418,27 @@ export async function brandAdd(domain: string, projectRoot = process.cwd()): Pro
         body: renderAssistantYaml(proposal, lane, id, brandId, primaryId, host),
       });
     }
+
+    // Communities: proposed only where something can actually be collected (see
+    // planCommunitySurfaces). Like assistants they declare the site surface they are
+    // measured against, so they too live under a proposed primary site surface.
+    const community = planCommunitySurfaces(proposal, xLaneCredential());
+    notes.push(...community.notes);
+    for (const c of community.propose) {
+      const id = composeChildId(brandId, `-${c.platform}`);
+      const claimedBy = byId.get(id);
+      if (claimedBy) {
+        return {
+          ok: false,
+          note: `the ${c.platform} surface and ${claimedBy} both derive the surface id "${id}"; nothing was created`,
+        };
+      }
+      byId.set(id, `the ${c.platform} surface`);
+      planned.push({
+        surface: { id, kind: "community", what: c.what, path: path.join(outDir, `${id}.proposed.yaml`), linkage: "strong" },
+        body: renderCommunityYaml(proposal, c, id, brandId, primaryId, host),
+      });
+    }
   } else {
     notes.push(
       `the seed domain did not answer, so no site surface was proposed — and an assistant surface must declare the site it observes, so the AI-answer lanes were not proposed either`,
@@ -319,21 +492,12 @@ export async function brandAdd(domain: string, projectRoot = process.cwd()): Pro
   }
   const written = planned.map((p) => p.surface);
 
-  // Store listings and social profiles are real parts of the brand's network and the probe
-  // found them, but no adapter collects evidence from either yet. Reporting them as found
-  // and unmonitorable is the honest shape; proposing a config for a kind that cannot run
+  // Store listings and the social networks nothing collects: real parts of the brand's
+  // network that the probe found and no adapter can read. Reporting them as found and
+  // unmonitorable is the honest shape; proposing a config for a kind that cannot run
   // would be an empty surface pretending to be coverage.
-  const notMonitored = [
-    ...proposal.facets.store_listings.map((s) => ({ what: s.store, url: s.url })),
-    ...proposal.facets.social_profiles.map((s) => ({ what: s.network, url: s.url })),
-  ];
-  if (notMonitored.length > 0) {
-    notes.push(
-      `found ${notMonitored.length} store/social ${notMonitored.length === 1 ? "profile" : "profiles"} (${notMonitored
-        .map((n) => n.what)
-        .join(", ")}); there is no adapter for those yet, so nothing was proposed for them`,
-    );
-  }
+  const { items: notMonitored, note: notMonitoredNote } = notMonitoredFacets(proposal);
+  if (notMonitoredNote) notes.push(notMonitoredNote);
 
   return {
     ok: true,

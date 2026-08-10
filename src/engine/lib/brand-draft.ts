@@ -24,6 +24,7 @@ import {
   discoverCompetitors,
 } from "./draft";
 import { extractAttr } from "../sense/adapters/crawl";
+import { probeMentions, type MentionProbe, type ProbePlatform } from "../sense/adapters/community";
 
 // Modest candidate probe: the well-known subdomain set, plus any same-registrable-domain
 // hosts found in the homepage's own links (a direct-fetch audit surfaces subdomains
@@ -129,9 +130,18 @@ export interface BrandProposal {
     social_profiles: SocialProfileFacet[];
     ai_lanes: AiLaneFacet[];
   };
+  // Keyless mention checks, one per keyless community platform: whether the brand is
+  // ACTUALLY discussed there. The gate behind proposing a community surface, and the
+  // reason a "none found" is reported rather than silently dropped.
+  community_mentions: MentionProbe[];
   unreachable: UnreachableProbe[]; // probes attempted and failed — reported, never guessed
   notes: string[];
 }
+
+// The platforms the community lane collects keylessly, and therefore the ones this probe
+// can gate on. `x` is a community platform too, but it is served by the x lane and gated
+// on that lane's credential instead (see xLaneCredential).
+const PROBED_PLATFORMS: ProbePlatform[] = ["reddit", "hacker-news"];
 
 // example.com from app.example.com — naive registrable-domain: last two labels.
 // Good enough for the candidate probe (multi-label public suffixes would only
@@ -557,6 +567,17 @@ export async function draftBrand(domain: string): Promise<BrandProposal> {
     { engine: "claude", prompts: [...prompts], evidence: laneEvidence.map((e) => ({ ...e })) },
   ];
 
+  // 6. Community mention check: is this brand actually discussed on the keyless
+  // platforms? One query per platform — the brand's own domain, which is the community
+  // lane's primary brand query and the one form that is not a bare token — and the
+  // platforms run in parallel because they are different hosts, so the lane's
+  // one-host-at-a-time politeness is untouched while the command stays quick. Skipped
+  // when the seed did not answer: a community surface must declare the site surface it
+  // observes, and there is no site surface to observe.
+  const community_mentions = html
+    ? await Promise.all(PROBED_PLATFORMS.map((p) => probeMentions(p, bareHost(primaryHost))))
+    : [];
+
   return {
     brand: { name, primaryDomain: primaryHost, description, category },
     competitors,
@@ -566,6 +587,7 @@ export async function draftBrand(domain: string): Promise<BrandProposal> {
       social_profiles: [...socialByUrl.values()],
       ai_lanes,
     },
+    community_mentions,
     unreachable,
     notes,
   };
