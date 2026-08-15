@@ -10,6 +10,20 @@ costs no API key and no extra account.
 It is a command-line tool, built to be driven by a coding agent. There is no server, no
 dashboard, and no account: an install is this repo, one SQLite file, and an env file.
 
+## Why it is built this way
+
+Evidence and inference are separate rows: what the engine observed is stored with its
+provenance and a confidence tag, and what it concluded is a claim linked back to the
+evidence it came from, so you can always ask which measurement a recommendation rests on.
+The loop is a set of explicit state transitions rather than one silent end-to-end run, so
+every station is its own command, each one inspectable and re-runnable, and a bet's
+lifecycle is guarded so it cannot skip a step. Nothing reaches your site without a human,
+because `publish` refuses any asset the review gate has not approved. After a fix ships,
+`verify` re-collects evidence and re-checks the same check keys the claim was made from,
+which keeps "shipped" and "actually live" two different states. Settled bets then feed
+priors that reweight future rankings, which is real but young: treat it as a reading, not
+a result.
+
 ## Start here
 
 You need Node 20+, and a domain. Use your own.
